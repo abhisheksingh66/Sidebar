@@ -1,0 +1,47 @@
+.table-container {
+  padding: 20px;
+  font-family: Arial, sans-serif;
+}
+
+.table-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 10px;
+}
+
+.all-btn {
+  padding: 6px 12px;
+  background-color: #1976d2;
+  color: #fff;
+  border: none;
+  cursor: pointer;
+  border-radius: 4px;
+}
+
+.services-table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.services-table th,
+.services-table td {
+  border: 1px solid #ddd;
+  padding: 10px;
+}
+
+.services-table th {
+  background-color: #f4f6f8;
+  text-align: left;
+}
+
+.expand-btn {
+  width: 30px;
+  height: 30px;
+  cursor: pointer;
+  font-size: 18px;
+}
+
+.expanded-row td {
+  background-color: #f9fafb;
+}

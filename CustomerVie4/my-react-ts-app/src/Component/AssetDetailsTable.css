@@ -1,0 +1,56 @@
+.asset-details-container {
+  background: #ffffff;
+  padding: 20px;
+  border-radius: 6px;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.08);
+  max-width: 900px;
+}
+
+.asset-title {
+  font-size: 18px;
+  font-weight: 600;
+  margin-bottom: 16px;
+}
+
+.asset-table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.asset-table tr {
+  border-bottom: 1px solid #e5e5e5;
+}
+
+.asset-table td {
+  padding: 10px 12px;
+  font-size: 14px;
+}
+
+.asset-table .label {
+  width: 35%;
+  color: #6b6b6b;
+  font-weight: 500;
+}
+
+.asset-table .value {
+  width: 65%;
+  color: #222;
+  font-weight: 600;
+}
+
+.status {
+  margin-top: 12px;
+  display: flex;
+  align-items: center;
+  font-size: 14px;
+  font-weight: 600;
+  color: #2e7d32;
+}
+
+.status .dot {
+  width: 8px;
+  height: 8px;
+  background: #2e7d32;
+  border-radius: 50%;
+  margin-right: 8px;
+}
