@@ -1,0 +1,2240 @@
+import { RouterStore } from "mobx-router5";
+import { Tree } from "primereact/tree";
+import { useEffect, useRef, useState } from "react";
+import { Accordion, AccordionTab } from "primereact/accordion";
+import { inject, observer } from "mobx-react";
+import MDMStore from "../../../stores/MDMStore/MDMStore";
+import "./../MDMViewAndEdit.scss";
+import flightIcon from "../../../images/flight-takeoff.svg";
+import flightIconWhite from "../../../images/flight-takeoff-white.svg";
+import helicopterIconWhite from "../../../images/helicopterWhite.svg";
+import helicopterIcon from "../../../images/helicopterBlack.svg";
+import _ from "lodash";
+import { Menu } from "primereact/menu";
+import ParentAssetInformation from "../ParentAssetInfomation/ParentAssetInfomation";
+import Field from "../../../models/IField";
+import SmartFormStore from "../../../stores/SmartFormStore/SmartFormStore";
+import AppConstants from "../../../stores/Constants/AppConstants";
+import { toast } from "react-toastify";
+import Loader from "../../../components/FormInputs/Loader/Loader";
+import AssociatedAssetsInformation from "../AssociatedAssetsInformation/AssociatedAssetsInformation";
+import { MenuItem } from "primereact/menuitem";
+import React from "react";
+import AdditionalServices from "../AdditinalServices/AdditionalServices";
+import MDMGlobalNumber from "../GlobalNumber/MDMGlobalNumber";
+import CountryAuthorization from "../CountryAuthorization/CountryAuthorization";
+import GoDirectAccess from "../GoDirectAccess/GoDirectAccess";
+import MDMAssetServicesInformation from "../AssociatedAssetServicesInformation/AssociatedAssetServicesInformation";
+import MDMRVAS from "../MDMRVAS/MDMRVAS";
+import AdvancedDataControl from "../AdvancedDataControl/AdvancedDataControl";
+import { VasScreensInfo } from "../../../stores/SmartFormStore/ScreensInfo";
+import GDAStore from "../../../stores/GDAStore/GDAStore";
+import { Tooltip } from "primereact/tooltip";
+import { Card } from "primereact/card";
+import { classNames } from "primereact/utils";
+import ActivityLogConstants from "../../../stores/Constants/ActivityLogConstants";
+import HistoryDialog from "../HistoryDialog";
+import ACARSConfiguration from "../ACARSConfiguration/ACARSConfiguration";
+import { InputText } from "primereact/inputtext";
+import { AssetRestrictionFlags } from "../../../models/GlobalSearch";
+
+interface IMDMAssetInformation {
+  mdmStore?: MDMStore;
+  routerStore?: RouterStore;
+  sfStore?: SmartFormStore;
+  gdaStore?: GDAStore;
+}
+
+const MDMAssetInformation = observer((props: IMDMAssetInformation) => {
+  const router = props?.routerStore;
+  const [parentActiveIndex, setParentActiveIndex] = useState(0);
+  const [assetsActiveIndex, setAssetsActiveIndex] = useState([]);
+  const menu: any = useRef(null);
+  const [scrollTop, setScrollTop] = useState(0);
+  let associtedAssetsInformation: any = {};
+  associtedAssetsInformation = props.mdmStore?.associatedAssetData;
+  const [treeFilterValue, setTreeFilterValue] = useState("");
+  const [activationReportLoading, setActivationReportLoading] = useState(false);
+  const currentRoute = router?.router?.getState();
+  const primaryAssetId = currentRoute?.params?.primary_asset_id;
+
+  useEffect(() => {
+    let assetActiveIndexArray: any = props.mdmStore?.assetActiveIndexArray;
+    setAssetsActiveIndex(assetActiveIndexArray);
+  }, [props.mdmStore?.assetActiveIndexArray, props.mdmStore?.activeIndexArray]);
+
+  useEffect(() => {}, [
+    props.mdmStore?.accordianData,
+    props.mdmStore?.treeExpandedKeys,
+  ]);
+
+  useEffect(() => {
+    const onScroll = () => {
+      setScrollTop(document.documentElement.scrollTop);
+      const element: any = document.querySelector(".p-tree-container");
+      if (document.documentElement.scrollTop > 100) {
+        if (element?.style) {
+          let heightOfTree = "81vh";
+          const clientHeight = window.innerHeight;
+          if (clientHeight > 879 && clientHeight < 940) {
+            heightOfTree = "79vh";
+          } else if (clientHeight > 630 && clientHeight < 881) {
+            heightOfTree = "77vh";
+          } else if (clientHeight > 475 && clientHeight < 631) {
+            heightOfTree = "75vh";
+          }
+          element!.style!.height = heightOfTree;
+        }
+      } else {
+        if (element?.style) {
+          element!.style!.height = "";
+        }
+      }
+    };
+    window.addEventListener("scroll", onScroll);
+
+    return () => window.removeEventListener("scroll", onScroll);
+  }, [scrollTop]);
+
+  async function handleTransfer() {
+    props.sfStore!.application = AppConstants.APP_SMARTFORM;
+    props.sfStore!.jxAPIResponse = null;
+    props.sfStore!.sbbAPIResponse = null;
+    props.sfStore!.appContext = "srf";
+    props.sfStore!.setScreensInfo("srf");
+    props.sfStore!.clearAllCustData();
+    props.sfStore!.clearAssetsProducts();
+    props.mdmStore!.mdmMasterOrderRequestType = "transfer_primary_asset";
+    props.routerStore!.router.navigate("customerinformation");
+    await props.sfStore!.getCurrentSubscription(
+      props.mdmStore!.selectedCustomerMasterID,
+      props.mdmStore!.selectedSiteMasterID,
+      ""
+    );
+    props.sfStore!.comercialAndTestTrasfer(
+      AppConstants.MDM_TRANSFER,
+      props.routerStore!.router
+    );
+    const auditData = {
+      action: ActivityLogConstants.TRANSFER_TAIL,
+      event: ActivityLogConstants.EVENT_TRANSFER,
+      reason: ActivityLogConstants.TRANSFER_TAIL_REASON,
+      data: null,
+    };
+    props.sfStore!.createAuditLog(auditData);
+  }
+
+  function cancleClick(e) {
+    e.preventDefault();
+    e.stopPropagation();
+    props.mdmStore!.isPareantAssetEditable = false;
+  }
+
+  function validateCurrentScreen(fields: Map<string, Field>): boolean {
+    let hasErrors = false;
+    fields.forEach((field: Field, key: string) => {
+      field = props.sfStore!.sfValidator!.validateField(field, "");
+      if (!props.sfStore!.sfValidator!.isBlank(field.error!)) {
+        hasErrors = true;
+      }
+    });
+    return hasErrors;
+  }
+
+  async function checkClick(e) {
+    e.preventDefault();
+    e.stopPropagation();
+    let fields: Map<string, Field> = props.sfStore?.getCurrScreen(
+      AppConstants.MDM_PARENT_ASSET_RN
+    ).fields!;
+    const aesidField = fields!.get(AppConstants.AESID);
+    const icaoField = fields!.get(AppConstants.HOME_AIRPORT_ICAO_CODE);
+    const typeOfUseField = fields!.get(AppConstants.TYPE_OF_USE);
+    const previousProvider = fields!.get(AppConstants.PREVIOUS_PROVIDER);
+    const parentAssetReseller = fields!.get(AppConstants.RESELLER);
+    const serviceCategoryField = fields!.get(AppConstants.SERVICE_CATEGORY);
+    const flagForserviceCategory: boolean = !_.isEqual(
+      serviceCategoryField?.value,
+      props.mdmStore?.seletedAssetResponse?.serviceCategory
+    );
+    const assetNumberField = fields!.get(AppConstants.PRIMARY_ASSET)?.value;
+    if (assetNumberField !== props.mdmStore?.seletedAssetResponse?.name) {
+      const apiResponse = await props.sfStore!.getParentAssetByAssetName(
+        assetNumberField!
+      );
+      props.sfStore!.parentAssetErrorMsg = apiResponse
+        ? "Tail is already exist"
+        : "";
+      fields!.get(AppConstants.PRIMARY_ASSET)!.error =
+        props.sfStore!.parentAssetErrorMsg;
+    }
+    if (!validateCurrentScreen(fields)) {
+      if (assetNumberField !== props.mdmStore?.seletedAssetResponse?.name) {
+        props.mdmStore!.associatedAssetActionName = "name_change_primary_asset";
+        props.mdmStore!.isCommonAssetConfirmationDialogOpen = true;
+      } else {
+        let Data: any = {
+          icao: aesidField?.value,
+          homeAirportCode: icaoField?.value,
+          typeOfUse: typeOfUseField?.value,
+          previousProvider: previousProvider?.value,
+          updatedBy: props.sfStore?.authInfo.name,
+          reseller: !_.isEmpty(parentAssetReseller?.value)
+            ? parentAssetReseller?.value
+            : [],
+          serviceCategory: serviceCategoryField?.value,
+        };
+        let success = await props.mdmStore!.editParentAssetInformation(
+          Data,
+          props.mdmStore!.seletedAssetResponse?.id,
+          props.mdmStore!.selectedCustomerAssetData?.site,
+          props.sfStore!.authInfo,
+          flagForserviceCategory,
+          props.sfStore
+        );
+        if (success) {
+          notify("success", AppConstants.MDM_PARENT_ASSET_UPDATE_SUCCESS);
+          props.mdmStore!.getSelectedAssetData(
+            props.mdmStore!.seletedAssetResponse?.id,
+            props.mdmStore!.selectedCustomerAssetData?.site,
+            true
+          );
+          props.mdmStore!.isPareantAssetEditable = false;
+        } else {
+          notify("error", AppConstants.MDM_PARENT_ASSET_UPDATE_ERROR);
+        }
+      }
+    }
+  }
+
+  function menuSelect(e) {
+    e.preventDefault();
+    e.stopPropagation();
+    menu.current.toggle(e);
+  }
+
+  function parentAssetMenuItem() {
+    let items: MenuItem[] = [];
+    if (
+      props.sfStore!.rbacUserPermissions.includes(
+        AppConstants.PRIMARY_ASSET_ACTIONS_PERMISSION_HISTORY
+      )
+    ) {
+      items.push({
+        label: "History",
+        command: () => {
+          props.mdmStore!.isCustomerOrPrimary = "primary";
+          props.mdmStore!.selectedHistoryModelTitle = "Primary Asset History";
+          props.mdmStore!.isHistoryModelOpen = true;
+          const auditData = {
+            action: ActivityLogConstants.TAIL_HISTORY,
+            event: ActivityLogConstants.EVENT_VIEW,
+            reason: ActivityLogConstants.TAIL_HISTORY_REASON,
+            data: null,
+          };
+          props.sfStore!.createAuditLog(auditData);
+        },
+      });
+    }
+
+    if (
+      props.sfStore!.rbacUserPermissions.includes(
+        AppConstants.PRIMARY_ASSET_ACTIONS_PERMISSION_COMMENTS
+      )
+    ) {
+      items.push({
+        label: "Comments",
+        command: () => {
+          props.mdmStore!.isCustomerCommentModelOpen = true;
+        },
+      });
+    }
+
+    if (
+      !props.mdmStore!.isPareantAssetEditable &&
+      props.mdmStore!.selectedCustomerAssetData?.status !== "INACTIVE"
+    ) {
+      if (
+        props.sfStore!.rbacUserPermissions.includes(
+          AppConstants.PRIMARY_ASSET_ACTIONS_PERMISSION_EDIT
+        ) &&
+        !props.mdmStore!.primaryAssetAndServicesRestrictionFlags
+          ?.isTransferInProgress
+      ) {
+        let mewnuItem: MenuItem = {
+          label: "Edit",
+          template: (
+            <>
+              <Tooltip target=".parentDeactivate" position="left" />
+              <span
+                className={`parentDeactivate menuIteamCss ${
+                  (props.mdmStore!.primaryAssetAndServicesRestrictionFlags
+                    ?.isGDASessionActive ||
+                    props.mdmStore!.primaryAssetAndServicesRestrictionFlags
+                      ?.isOrderInProgress) &&
+                  "p-disabled"
+                }`}
+                onClick={() => {
+                  if (
+                    !props.mdmStore!.primaryAssetAndServicesRestrictionFlags
+                      ?.isGDASessionActive &&
+                    !props.mdmStore!.primaryAssetAndServicesRestrictionFlags
+                      ?.isOrderInProgress
+                  ) {
+                    props.mdmStore!.isPareantAssetEditable = true;
+                  }
+                }}
+                data-pr-tooltip={getDisabledToolText(
+                  props.mdmStore!.primaryAssetAndServicesRestrictionFlags
+                    ?.isGDASessionActive,
+                  props.mdmStore!.primaryAssetAndServicesRestrictionFlags
+                    ?.isOrderInProgress,
+                  "Primary asset",
+                  "edited"
+                )}
+              >
+                Edit
+              </span>
+            </>
+          ),
+        };
+        items.push(mewnuItem);
+      }
+
+      if (
+        props.sfStore!.rbacUserPermissions.includes(
+          AppConstants.PRIMARY_ASSET_ACTIONS_PERMISSION_DEACTIVATE
+        ) &&
+        !props.mdmStore!.primaryAssetAndServicesRestrictionFlags
+          ?.isTransferInProgress
+      ) {
+        let mewnuItem1: MenuItem = {
+          label: "Deactivate",
+          template: (
+            <>
+              <Tooltip target=".parentDeactivate" position="left" />
+              <span
+                className={`parentDeactivate menuIteamCss ${
+                  (props.mdmStore!.primaryAssetAndServicesRestrictionFlags
+                    ?.isGDASessionActive ||
+                    props.mdmStore!.primaryAssetAndServicesRestrictionFlags
+                      ?.isOrderInProgress) &&
+                  "p-disabled"
+                }`}
+                onClick={() => {
+                  if (
+                    !props.mdmStore!.primaryAssetAndServicesRestrictionFlags
+                      ?.isGDASessionActive &&
+                    !props.mdmStore!.primaryAssetAndServicesRestrictionFlags
+                      ?.isOrderInProgress
+                  ) {
+                    props.mdmStore!.clearOnhide(props.sfStore);
+                    props.mdmStore!.modalHeader = "Deactivate Primary Asset";
+                    props.mdmStore!.isCustomerDeactivateModelOpen = true;
+                    props.sfStore!.modifyRequestType = "";
+                  }
+                }}
+                data-pr-tooltip={getDisabledToolText(
+                  props.mdmStore!.primaryAssetAndServicesRestrictionFlags
+                    ?.isGDASessionActive,
+                  props.mdmStore!.primaryAssetAndServicesRestrictionFlags
+                    ?.isOrderInProgress,
+                  "Primary asset",
+                  "deactivated"
+                )}
+              >
+                Deactivate
+              </span>
+            </>
+          ),
+        };
+        items.push(mewnuItem1);
+      }
+
+      if (
+        props.sfStore!.rbacUserPermissions.includes(
+          AppConstants.PRIMARY_ASSET_ACTIONS_PERMISSION_ACTIVATION_REPORT
+        )
+      ) {
+        let mewnuItem2: MenuItem = {
+          label: "Activation Report",
+          command: async () => {
+            const customerData =
+              props.mdmStore?.selectedCustomerDetailsResponse;
+            let siteName = props.mdmStore?.selectedCustomerAssetData?.site;
+            try {
+              const requestBody = {
+                siteMasterId: props.mdmStore?.selectedSiteMasterID,
+                siteName: siteName,
+                customerId: customerData?.id,
+                assetServiceIds: props.mdmStore?.getAssetServiceIds(),
+              };
+              setActivationReportLoading(true);
+              const response =
+                await props.mdmStore!.mdmService!.getActivationReportPdf(
+                  requestBody
+                );
+              const objectURL = window.URL.createObjectURL(
+                new Blob([(response as any).data], { type: "application/pdf" })
+              );
+
+              const filename = `ACTIVATION_REPORT_${siteName}.pdf`;
+
+              const link = document.createElement("a");
+              link.href = objectURL;
+              link.setAttribute("download", filename);
+              document.body.appendChild(link);
+              link.click();
+              link.remove();
+              setActivationReportLoading(false);
+              const auditData = {
+                action: ActivityLogConstants.ACTIVATION_REPORT,
+                event: ActivityLogConstants.EVENT_CREATE,
+                reason: ActivityLogConstants.ACTIVATION_REPORT_REASON,
+                data: null,
+              };
+              props.sfStore!.createAuditLog(auditData);
+            } catch (error) {
+              console.error("Error generating PDF:", error);
+              const auditData = {
+                action: `${ActivityLogConstants.API_CALL_FAIL_ACTION} - Activation Report`,
+                event: ActivityLogConstants.API_CALL_FAIL,
+                reason: ActivityLogConstants.API_CALL_FAIL_REASON,
+                data: null,
+              };
+              props.sfStore!.createAuditLog(auditData);
+            }
+          },
+        };
+        items.push(mewnuItem2);
+      }
+    }
+
+    if (
+      !props.mdmStore?.isPareantAssetEditable &&
+      !props.mdmStore!.primaryAssetAndServicesRestrictionFlags
+        ?.isTransferInProgress &&
+      props.mdmStore?.selectedCustomerAssetData?.status !== "INACTIVE" &&
+      props.mdmStore?.selectedCustomerAssetData.isTransferEnable &&
+      (props.sfStore!.rbacUserPermissions.includes(
+        AppConstants.ACTIVATION_ORDERS_PERMISSION_ID_UPDATE
+      ) ||
+        props.sfStore!.rbacUserPermissions.includes(
+          AppConstants.ACTIVATION_ORDERS_PERMISSION_ID_VIEW
+        ))
+    ) {
+      if (
+        props.sfStore!.rbacUserPermissions.includes(
+          AppConstants.PRIMARY_ASSET_ACTIONS_PERMISSION_TRANSFER
+        )
+      ) {
+        let menuItem1: MenuItem = {
+          label: "Transfer",
+          template: (
+            <>
+              <Tooltip target=".parentDeactivate" position="left" />
+              <span
+                className={`parentDeactivate menuIteamCss ${
+                  (props.mdmStore!.primaryAssetAndServicesRestrictionFlags
+                    ?.isGDASessionActive ||
+                    props.mdmStore!.primaryAssetAndServicesRestrictionFlags
+                      ?.isOrderInProgress ||
+                    !props.mdmStore!.selectedCustomerAssetData
+                      ?.isTransferDisable) &&
+                  "p-disabled"
+                }`}
+                onClick={() => {
+                  if (
+                    !props.mdmStore!.primaryAssetAndServicesRestrictionFlags
+                      ?.isGDASessionActive &&
+                    !props.mdmStore!.primaryAssetAndServicesRestrictionFlags
+                      ?.isOrderInProgress &&
+                    props.mdmStore!.selectedCustomerAssetData?.isTransferDisable
+                  ) {
+                    handleTransfer();
+                  }
+                }}
+                data-pr-tooltip={getDisabledToolText(
+                  props.mdmStore!.primaryAssetAndServicesRestrictionFlags
+                    ?.isGDASessionActive,
+                  props.mdmStore!.primaryAssetAndServicesRestrictionFlags
+                    ?.isOrderInProgress,
+                  "Transfer",
+                  "allowed",
+                  !props.mdmStore!.selectedCustomerAssetData?.isTransferDisable
+                )}
+              >
+                Transfer
+              </span>
+            </>
+          ),
+        };
+        items.push(menuItem1);
+      }
+    }
+    return _.sortBy(items, ["label"]);
+  }
+
+  function getDisabledToolText(
+    isGDASessionActive: any,
+    isOrderInProgress: any,
+    name: string,
+    type: string,
+    transferDeactve?: boolean
+  ) {
+    let msg: string = `${name} cannot be ${type} `;
+    if (isGDASessionActive && !isOrderInProgress) {
+      return (msg += AppConstants.MDM_DISABLED_TOOLTEXT_FOR_GDA);
+    }
+    if (!isGDASessionActive && isOrderInProgress) {
+      return (msg += AppConstants.MDM_DISABLED_TOOLTEXT_FOR_ORDER);
+    }
+    if (isGDASessionActive && isOrderInProgress) {
+      return (msg += AppConstants.MDM_DISABLED_TOOLTEXT_FOR_ORDER_AND_GDA);
+    }
+    if (transferDeactve) {
+      return AppConstants.MDM_TRANSFER_DEACTIVATE_TOOLTEXT;
+    }
+    // if (isOrderFailed){
+    //     return msg += AppConstants.MDM_DISABLED_TOOLTEXT_FOR_FAILED_ORDER
+    // }
+    return "";
+  }
+
+  function accordianHeader(value: string) {
+    let menuItem = parentAssetMenuItem();
+    return (
+      <div className="accordianHeader">
+        <div className="parentAssetDiv">
+          {props.mdmStore!.selectedCustomerAssetData?.type === "HELICOPTER" ||
+          props.mdmStore!.selectedCustomerAssetData?.type === "AIRCRAFT" ? (
+            <img
+              className="accordionHeaderImg"
+              src={
+                props.mdmStore!.selectedCustomerAssetData?.status === "INACTIVE"
+                  ? props.mdmStore!.selectedCustomerAssetData?.type ===
+                    "AIRCRAFT"
+                    ? flightIcon
+                    : helicopterIcon
+                  : props.mdmStore!.selectedCustomerAssetData?.type ===
+                    "AIRCRAFT"
+                  ? flightIcon
+                  : helicopterIcon
+              }
+            />
+          ) : (
+            <></>
+          )}
+          <span
+            className={`parentAssetName accordianHeaderFont ${
+              props.mdmStore!.selectedCustomerAssetData?.status === "INACTIVE"
+                ? "accordionHeaderdeactivate"
+                : ""
+            }`}
+          >
+            {props.mdmStore!.selectedCustomerAssetData?.site}
+          </span>
+          {props.mdmStore!.primaryAssetAndServicesRestrictionFlags
+            ?.isOrderInProgress && (
+            <span
+              className="inprogressOrderDiv inprogressOrderDivTooltip"
+              onClick={(e) => {
+                e.stopPropagation();
+                e.preventDefault();
+                props.mdmStore!.mdmOrderFilterType = "primaryasset";
+                props.mdmStore!.mdmOrderAssetId =
+                  props.mdmStore!.selectedSiteMasterID;
+                props.mdmStore!.mdmOrderPopVisible = true;
+                const auditData = {
+                  action: `${
+                    ActivityLogConstants.USER_ACCESSED_INPROGRESS_ORDER
+                  } ${props.mdmStore!.selectedCustomerAssetData?.site}`,
+                  event: ActivityLogConstants.EVENT_VIEW,
+                  reason: `${
+                    ActivityLogConstants.USER_ACCESSED_INPROGRESS_ORDER_REASON
+                  } ${props.mdmStore!.selectedCustomerAssetData?.site}`,
+                  data: null,
+                };
+                props.sfStore!.createAuditLog(auditData);
+              }}
+              data-pr-tooltip="Click to See Inprogress orders for Primary Asset"
+              data-pr-position="top"
+            >
+              In Progress Orders
+            </span>
+          )}
+          <Tooltip target=".inprogressOrderDivTooltip" />
+          {props.mdmStore!.primaryAssetAndServicesRestrictionFlags
+            ?.isOrderFailed &&
+            !props.mdmStore!.primaryAssetAndServicesRestrictionFlags
+              ?.isOrderInProgress && (
+              <span
+                className="failedOrderDiv"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  e.preventDefault();
+                  props.mdmStore!.mdmOrderFilterType = "primaryasset";
+                  props.mdmStore!.mdmOrderAssetId =
+                    props.mdmStore!.selectedSiteMasterID;
+                  props.mdmStore!.mdmOrderPopVisible = true;
+                  props.mdmStore!.isMDMOrderOrderFailed = true;
+                  const auditData = {
+                    action: `${
+                      ActivityLogConstants.USER_ACCESSED_FAILED_ORDER
+                    } ${props.mdmStore!.selectedCustomerAssetData?.site}`,
+                    event: ActivityLogConstants.EVENT_VIEW,
+                    reason: `${
+                      ActivityLogConstants.USER_ACCESSED_FAILED_ORDER_REASON
+                    } ${props.mdmStore!.selectedCustomerAssetData?.site}`,
+                    data: null,
+                  };
+                  props.sfStore!.createAuditLog(auditData);
+                }}
+                data-pr-tooltip="Click to See Failed orders for Primary Asset"
+                data-pr-position="top"
+              >
+                Failed Orders
+              </span>
+            )}
+          <Tooltip target=".failedOrderDiv" />
+          {props.mdmStore!.primaryAssetAndServicesRestrictionFlags
+            ?.isTransferInProgress && (
+            <span className="transfer-info-span">
+              <span className="info-icon pi pi-info-circle"></span>
+              <span
+                style={{ color: "#10659f", fontWeight: 500, fontSize: "1rem" }}
+              >
+                Transfer Order In Progress
+              </span>
+            </span>
+          )}
+        </div>
+        <div className="parentAssetHeaderMenu">
+          {props.mdmStore?.selectedCustomerAssetData?.status === "ACTIVE" &&
+          !props.mdmStore.hidePrimaryAssetStatus &&
+          !props.mdmStore.isFetchingPrimaryAssetAndServicesRestrictionFlags &&
+          props.mdmStore?.primaryAssetAndServicesRestrictionFlags?.assets?.some?.(
+            (_x) => _x?.assetStatus === "ACTIVATED"
+          ) ? (
+            <div className="parentAssetStatusDiv">
+              <i
+                className="pi pi-circle-fill parrentAssetStatusIcon"
+                style={{ color: "green" }}
+              ></i>
+              <span className="status font-normal font-bold">{"Active"}</span>
+            </div>
+          ) : props.mdmStore?.selectedCustomerAssetData?.status ===
+            "INACTIVE" ? (
+            <div className="parentAssetStatusDiv">
+              <i
+                className="pi pi-circle-fill parrentAssetStatusIcon"
+                style={{ color: "red" }}
+              ></i>
+              <span className="status font-normal font-bold">
+                {"Deactivated"}
+              </span>
+            </div>
+          ) : props.mdmStore?.selectedCustomerAssetData?.status !== "ACTIVE" &&
+            props.mdmStore?.selectedCustomerAssetData?.status !== "INACTIVE" ? (
+            <div>
+              <span className="status font-normal font-bold">
+                {props.mdmStore?.selectedCustomerAssetData?.status}
+              </span>
+            </div>
+          ) : (
+            <div>
+              <span className="status font-normal"></span>
+            </div>
+          )}
+          <div className="accordianHeaderMenu">
+            {props.mdmStore?.isPareantAssetEditable && (
+              <div
+                onClick={(e) => {
+                  e.stopPropagation();
+                  e.preventDefault();
+                }}
+                data-testid="parentAsset-clickDiv-btn"
+              >
+                <i
+                  className="pi pi-check-circle checkIcon cursorPointer"
+                  data-testid="parentAsset-save-btn"
+                  style={{ color: "#1274B7" }}
+                  onClick={checkClick}
+                ></i>
+                <i
+                  className="pi pi-times-circle checkIcon cursorPointer"
+                  data-testid="parentAsset-cancel-btn"
+                  style={{ color: "#BB0000" }}
+                  onClick={cancleClick}
+                ></i>
+              </div>
+            )}
+            {!props.mdmStore?.isPareantAssetEditable && menuItem.length > 0 && (
+              <div
+                className="menuIcon"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  e.preventDefault();
+                }}
+                data-testid="parentAsset-menuDiv-btn"
+              >
+                <Menu model={menuItem} popup ref={menu} id="popup_menu_left" />
+                <i
+                  className={`pi ${
+                    props.mdmStore!
+                      .isFetchingSelectedCustomerRestrictionFlags ||
+                    props.mdmStore!
+                      .isFetchingPrimaryAssetAndServicesRestrictionFlags ||
+                    activationReportLoading
+                      ? "pi-spin pi-spinner"
+                      : "pi pi-ellipsis-v"
+                  } cursorPointer ${
+                    props.mdmStore?.selectedCustomerAssetData?.status ===
+                    "INACTIVE"
+                      ? "accordionHeaderdeactivate"
+                      : ""
+                  }`}
+                  style={{ fontSize: "1rem" }}
+                  data-testid="parentAsset-menu-btn"
+                  onClick={menuSelect}
+                ></i>
+              </div>
+            )}
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  function menuItem(
+    asset: any,
+    assetId: number,
+    status: any,
+    associatedAssetFlags: AssetRestrictionFlags
+  ) {
+    let menuItems: MenuItem[] = [];
+    if (
+      props.sfStore!.rbacUserPermissions.includes(
+        AppConstants.ASSET_ACTIONS_PERMISSION_EDIT
+      )
+    ) {
+      let menuItem: MenuItem = {
+        label: "Edit",
+        data: { asset: asset, assetId: assetId },
+        command: (e) => {
+          asset.isAssociatedAssetEditable = true;
+        },
+      };
+      menuItems.push(menuItem);
+    }
+    if (
+      props.sfStore!.rbacUserPermissions.includes(
+        AppConstants.ASSET_ACTIONS_PERMISSION_DEACTIVATE
+      )
+    ) {
+      let menuItem1: MenuItem = {
+        template: (
+          <>
+            <Tooltip target=".assetDeactivate" position="left" />
+            <span
+              className={`assetDeactivate menuIteamCss ${
+                (props.mdmStore!.primaryAssetAndServicesRestrictionFlags
+                  ?.isGDASessionActive ||
+                  associatedAssetFlags.isOrderInProgress) &&
+                "p-disabled"
+              }`}
+              onClick={() => {
+                if (
+                  asset &&
+                  !props.mdmStore!.primaryAssetAndServicesRestrictionFlags
+                    ?.isGDASessionActive &&
+                  !associatedAssetFlags.isOrderInProgress
+                ) {
+                  props.mdmStore!.clearOnhide(props.sfStore);
+                  props.mdmStore!.assetData = asset;
+                  props.mdmStore!.modalHeader = "Deactivate Asset";
+                  props.mdmStore!.isCustomerDeactivateModelOpen = true;
+                }
+                props.sfStore!.modifyRequestType = "";
+              }}
+              data-pr-tooltip={getDisabledToolText(
+                props.mdmStore!.primaryAssetAndServicesRestrictionFlags
+                  ?.isGDASessionActive,
+                associatedAssetFlags.isOrderInProgress,
+                "Asset",
+                "deactivated"
+              )}
+            >
+              Deactivate
+            </span>
+          </>
+        ),
+      };
+      menuItems.push(menuItem1);
+    }
+
+    // if (status === "SUSPENDED") {
+    //     if (props.sfStore!.rbacUserPermissions.includes(AppConstants.ASSET_ACTIONS_PERMISSION_RESUME)) {
+    //         let resumeMenuItem: MenuItem = {
+    //             template:
+    //                 <>
+    //                     <Tooltip target=".parentDeactivate" position="left" />
+    //                     <span className={`assetDeactivate menuIteamCss ${(props.mdmStore!.primaryAssetAndServicesRestrictionFlags?.isGDASessionActive || associatedAssetFlags.isOrderInProgress) && 'p-disabled'}`}
+    //                         onClick={() => {
+    //                             if (!props.mdmStore!.primaryAssetAndServicesRestrictionFlags?.isGDASessionActive && !associatedAssetFlags.isOrderInProgress) {
+    //                                 props.mdmStore!.assetData = asset;
+    //                                 props.mdmStore!.selectedModifyAction = 'RESUME';
+    //                                 props.mdmStore!.customModalClass = "";
+    //                                 props.mdmStore!.modalHeader = "Resume Asset";
+    //                                 props.mdmStore!.isAssetAction = true;
+    //                                 props.mdmStore!.mdmMasterOrderRequestType = "resume_asset";
+    //                                 props.mdmStore!.isMDMDModifyServiceFormModalOpen = true;
+    //                             }
+    //                         }}
+    //                         data-pr-tooltip={getDisabledToolText(props.mdmStore!.primaryAssetAndServicesRestrictionFlags?.isGDASessionActive, associatedAssetFlags.isOrderInProgress, "Asset", "resumed")}
+    //                     >Resume</span>
+    //                 </>,
+    //         };
+    //         menuItems.push(resumeMenuItem);
+    //     }
+    // } else {
+    //     if (props.sfStore!.rbacUserPermissions.includes(AppConstants.ASSET_ACTIONS_PERMISSION_SUSPEND)) {
+    //         let suspendMenuItem: MenuItem = {
+
+    //             template:
+    //                 <>
+    //                     <Tooltip target=".parentDeactivate" position="left" />
+    //                     <span className={`assetDeactivate menuIteamCss ${(props.mdmStore!.primaryAssetAndServicesRestrictionFlags?.isGDASessionActive || associatedAssetFlags.isOrderInProgress) && 'p-disabled'}`}
+    //                         onClick={() => {
+    //                             if (!props.mdmStore!.primaryAssetAndServicesRestrictionFlags?.isGDASessionActive && !associatedAssetFlags.isOrderInProgress) {
+    //                                 props.mdmStore!.clearOnhide(props!.sfStore);
+    //                                 props.mdmStore!.assetData = asset;
+    //                                 props.mdmStore!.selectedModifyAction = 'SUSPEND';
+    //                                 props.mdmStore!.customModalClass = "modify-modal";
+    //                                 props.mdmStore!.modalHeader = "Suspend Asset";
+    //                                 props.mdmStore!.isAssetAction = true;
+    //                                 props.mdmStore!.mdmMasterOrderRequestType = "suspend_asset";
+    //                                 props.mdmStore!.isMDMDModifyServiceFormModalOpen = true;
+    //                             }
+    //                         }
+    //                         }
+    //                         data-pr-tooltip={getDisabledToolText(props.mdmStore!.primaryAssetAndServicesRestrictionFlags?.isGDASessionActive, associatedAssetFlags.isOrderInProgress, "Asset", "suspended")}
+    //                     >Suspend</span>
+    //                 </>,
+    //         };
+
+    //         menuItems.push(suspendMenuItem);
+    //     }
+    // }
+
+    if (_.includes(["ROUTER", "PBX"], asset?.assetTypeField?.value)) {
+      menuItems = [];
+      let menuItem: MenuItem = {
+        label: "Edit",
+        data: { asset: asset, assetId: assetId },
+        command: (e) => {
+          if (!props.sfStore!.viewOnlyPermission()) {
+            redirectToEditPage(asset?.assetTypeField?.value, asset);
+          }
+        },
+      };
+      menuItems.push(menuItem);
+    }
+
+    return _.sortBy(menuItems, ["label"]);
+  }
+
+  function redirectToEditPage(asset: any, assetDetails?: any) {
+    switch (asset) {
+      case AppConstants.MDM_RVAS:
+        props.sfStore!.screenTypes = VasScreensInfo;
+        props.sfStore!.appContext = AppConstants.APP_CONTEXT_VAS;
+        props.sfStore!.redirectMDMRvasToIp = true;
+        props.sfStore!.getIpProfileInfoById(
+          props.mdmStore!.effectiveConfigurationId,
+          router!.router
+        );
+        router!.navigate(AppConstants.VAS_CREATE_IP_PROFILE_RN);
+        break;
+      case AppConstants.MDM_GLOBAL_NUMBER:
+        props.sfStore!.redirectMDMGlobalNUmberToEditGN = true;
+        props.sfStore!.isEditGlobalNumber = true;
+        props.sfStore!.isViewGlobalNumber = false;
+        router!.navigate("addglobalnumber");
+        break;
+      case AppConstants.ASSET_ROUTER:
+        let selectedRecord: any = {};
+        selectedRecord.assetManufacturer =
+          assetDetails?.assetManufacturerField?.value;
+        selectedRecord.assetManufacturerId = assetDetails?.assetManufacturerId;
+        selectedRecord.assetModel = assetDetails?.assetModelField?.value;
+        selectedRecord.assetModelId = assetDetails?.assetModelId;
+        selectedRecord.assetType = assetDetails?.assetTypeField?.value;
+        selectedRecord.primaryAssetName = assetDetails?.primaryAssetName;
+        selectedRecord.primaryAssetId = assetDetails?.primaryAssetId;
+        selectedRecord.assetIdentifierValue =
+          assetDetails?.assetIdentifierValueField?.value;
+        selectedRecord.assetId = assetDetails?.assetId;
+        selectedRecord.customerId = assetDetails?.customerMasterId;
+        selectedRecord.notes = assetDetails?.notes;
+        selectedRecord.assetModelDescription =
+          assetDetails?.assetModelDescription;
+        props.sfStore?.resetAddRouterFields();
+        props.sfStore!.convertRouterResponseToStore(selectedRecord);
+        props.sfStore!.disableSaveForLater = false;
+        props.sfStore!.isAddRouterScreen = false;
+        if (props.mdmStore?.associatedAssetServicesData?.length) {
+          let assetServices = props.mdmStore?.associatedAssetServicesData?.find(
+            (services) =>
+              services.some(
+                (service) => service.assetId === selectedRecord.assetId
+              )
+          );
+          if (assetServices) {
+            let serviceIds = _.map(assetServices, "serviceId");
+            props.sfStore!.serviceIds = serviceIds;
+            props.sfStore!.routerSelectedModelServices = assetServices;
+          }
+          //let services = props.mdmStore?.associatedAssetServicesData[index];
+          // let serviceIds = _.map(services, 'serviceId');
+          // props.sfStore!.serviceIds = serviceIds;
+          //props.sfStore!.routerSelectedModelServices = services;
+        }
+        router!.navigate("add_router");
+        break;
+    }
+  }
+
+  function vasMenuItem(asset: any) {
+    let menuItems: MenuItem[] = [];
+    if (!props.sfStore!.viewOnlyPermission()) {
+      let menuItem: MenuItem = {
+        label: "Edit",
+        data: { asset: asset },
+        command: (e) => {
+          const auditData = {
+            action: `${asset.label} - ${ActivityLogConstants.VAS_SERVICES_EDIT_ACTION} ${props.sfStore?.mdmselectedCustomerName}`,
+            event: ActivityLogConstants.EVENT_BUTTON_CLICK,
+            reason: `${asset.label} - ${ActivityLogConstants.BUTTON_CLICK_PREFIX} ${ActivityLogConstants.EDIT_BUTTON} ${ActivityLogConstants.VAS_SERVICES_EDIT_SUFFIX}  ${props.sfStore?.mdmselectedCustomerName}`,
+            data: null,
+          };
+          props.sfStore!.createAuditLog(auditData);
+          redirectToEditPage(asset.label, asset);
+        },
+      };
+      menuItems.push(menuItem);
+    }
+    let historyMenuItem: MenuItem = {
+      label: "History",
+      data: { asset: asset },
+      command: (event) => {
+        const label = event.item.data.asset.label;
+        props.mdmStore!.selectedHistoryModelTitle = label + " History";
+        if (label == "Global Number") {
+          props.mdmStore!.isGlobalNumberHistoryModelOpen = true;
+        } else if (label == "rVAS") {
+          props.mdmStore!.isVasHistoryModelOpen = true;
+        }
+      },
+    };
+    menuItems.push(historyMenuItem);
+    return () => menuItems;
+  }
+
+  function associtedAssetMenuSelect(e, menuRef) {
+    menuRef.current.toggle(e);
+  }
+
+  function associatedAssetsMenucancleClick(asset: any) {
+    const filterAssetData =
+      props.mdmStore!.seletedAssociatedAssetResponse?.assets?.find(
+        (item) => item.assetId === asset.assetId
+      );
+    if (asset.assetModelId !== filterAssetData?.assetModelId) {
+      asset.assetModelId = filterAssetData?.assetModelId;
+      asset.assetModelField.value = filterAssetData?.assetModel;
+    }
+    asset!.isAssociatedAssetEditable = false;
+  }
+
+  async function associatedAssetsCheckClick(asset: any) {
+    const filterAssetData =
+      props.mdmStore!.seletedAssociatedAssetResponse?.assets?.find(
+        (item) => item.assetId === asset.assetId
+      );
+    if (asset.assetModelId !== filterAssetData?.assetModelId) {
+      const response = await props.mdmStore!.updateAssociatedAsset(
+        asset,
+        props.sfStore!
+      );
+      if (response) {
+        notify("success", AppConstants.MDM_ASSOCIATED_ASSET_UPDATE_SUCCESS);
+      } else {
+        notify("error", AppConstants.MDM_ASSOCIATED_ASSET_UPDATE_ERROR);
+      }
+    }
+    asset!.isAssociatedAssetEditable = false;
+  }
+
+  function camelCase(str: any) {
+    return (
+      str &&
+      str
+        .toLowerCase()
+        .split(" ")
+        .map(function (word) {
+          return word.charAt(0).toUpperCase() + word.slice(1);
+        })
+        .join(" ")
+    );
+  }
+
+  function associatedAssetsHeader(value: any) {
+    const associatedAssetFlags =
+      props.mdmStore?.primaryAssetAndServicesRestrictionFlags?.assets?.find(
+        (asset) => asset?.assetId && asset.assetId === value?.data?.assetId
+      );
+    return (
+      <div className="accordianHeader associatedAssetsHeadeCSS" id={value?.key}>
+        <div className="parentAssetDiv">
+          <span className="parentAssetName">
+            {!_.isEmpty(value?.data?.assetModel)
+              ? value?.data?.assetModel + " (" + value?.data?.assetType + ")"
+              : value?.label}
+          </span>
+          {value?.label !== "Value Added Services" &&
+            associatedAssetFlags?.isOrderInProgress && (
+              <span
+                className="inprogressOrderDiv inprogressOrderDivTooltip"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  e.preventDefault();
+                  props.mdmStore!.mdmOrderFilterType = "asset";
+                  props.mdmStore!.mdmOrderAssetId = value?.data?.assetId;
+                  props.mdmStore!.mdmOrderPopVisible = true;
+                  const auditData = {
+                    action: `${ActivityLogConstants.USER_ACCESSED_INPROGRESS_ORDER} ${value?.label}`,
+                    event: ActivityLogConstants.EVENT_VIEW,
+                    reason: `${ActivityLogConstants.USER_ACCESSED_INPROGRESS_ORDER_REASON} ${value?.label}`,
+                    data: null,
+                  };
+                  props.sfStore!.createAuditLog(auditData);
+                }}
+                data-pr-tooltip="Click to See Inprogress orders for Asset"
+                data-pr-position="top"
+              >
+                In Progress Orders
+              </span>
+            )}
+          <Tooltip target=".inprogressOrderDivTooltip" />
+          {value?.label !== "Value Added Services" &&
+            associatedAssetFlags?.isOrderFailed &&
+            !associatedAssetFlags?.isOrderInProgress && (
+              <span
+                className="failedOrderDiv"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  e.preventDefault();
+                  props.mdmStore!.mdmOrderFilterType = "asset";
+                  props.mdmStore!.mdmOrderAssetId = value?.data?.assetId;
+                  props.mdmStore!.mdmOrderPopVisible = true;
+                  props.mdmStore!.isMDMOrderOrderFailed = true;
+                  const auditData = {
+                    action: `${ActivityLogConstants.USER_ACCESSED_INPROGRESS_ORDER} ${value?.label}`,
+                    event: ActivityLogConstants.EVENT_VIEW,
+                    reason: `${ActivityLogConstants.USER_ACCESSED_INPROGRESS_ORDER_REASON} ${value?.label}`,
+                    data: null,
+                  };
+                  props.sfStore!.createAuditLog(auditData);
+                }}
+                data-pr-tooltip="Click to See Failed orders for Asset"
+                data-pr-position="top"
+              >
+                Failed Orders
+              </span>
+            )}
+          <Tooltip target=".failedOrderDiv" />
+
+          {value?.label !== "Value Added Services" &&
+            props.mdmStore!.primaryAssetAndServicesRestrictionFlags
+              ?.isTransferInProgress && (
+              <span className="transfer-info-span">
+                <span className="info-icon pi pi-info-circle"></span>
+                <span
+                  style={{
+                    color: "#10659f",
+                    fontWeight: 500,
+                    fontSize: "1rem",
+                  }}
+                >
+                  Transfer Order In Progress
+                </span>
+              </span>
+            )}
+        </div>
+        <div className="assetHeaderMenu">
+          {/* {value?.data?.status === "ACTIVATED" ?
+                        <div className="assetStatusDiv">
+                            <i className="pi pi-circle-fill assetStatusIcon" style={{ color: 'green' }}></i>
+                            <span className="status font-normal">{"Active"}</span>
+                        </div>
+                        : value?.data?.status === "DEACTIVATED" ?
+                            <div className="assetStatusDiv">
+                                <i className="pi pi-circle-fill assetStatusIcon" style={{ color: 'red' }}></i>
+                                <span className="status font-normal">{"Deactivated"}</span>
+                            </div>
+                            : (value?.data?.status !== "DEACTIVATED" && value?.data?.status !== "ACTIVATED") ?
+                                <div className="assetStatusDiv">
+                                    <span className="status font-normal">{camelCase(value?.data?.status)}</span>
+                                </div>
+                                : <div className="assetStatusDiv">
+                                    <span className="status font-normal"></span>
+                                </div>
+                    } */}
+          <div className="accordianHeaderMenu">
+            {props.mdmStore?.associatedAssetsEditData !== undefined ? (
+              props.mdmStore?.associatedAssetsEditData?.map((asset) => {
+                let localMenuItem =
+                  !value?.data?.showDeactiveStatus &&
+                  associatedAssetFlags &&
+                  associatedAssetFlags?.assetId === asset?.assetId
+                    ? menuItem(
+                        asset,
+                        value?.data?.assetId,
+                        value?.data?.status,
+                        associatedAssetFlags
+                      )
+                    : [];
+                let menuRef: any = React.createRef();
+                if (asset?.assetId === value?.data?.assetId) {
+                  return (
+                    <>
+                      {asset?.isAssociatedAssetEditable && (
+                        <div
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            e.preventDefault();
+                          }}
+                          data-testid="associatedAsset-clickDiv-btn"
+                        >
+                          <i
+                            className="pi pi-check-circle checkIcon cursorPointer"
+                            style={{ color: "#1274B7" }}
+                            data-testid="associatedAsset-save-btn"
+                            onClick={(e) => {
+                              associatedAssetsCheckClick(asset);
+                            }}
+                          ></i>
+                          <i
+                            className="pi pi-times-circle checkIcon cursorPointer"
+                            style={{ color: "#BB0000" }}
+                            data-testid="associatedAsset-cancel-btn"
+                            onClick={(e) => {
+                              e.preventDefault();
+                              e.stopPropagation();
+                              associatedAssetsMenucancleClick(asset);
+                            }}
+                          ></i>
+                        </div>
+                      )}
+                      {!asset?.isAssociatedAssetEditable &&
+                        assetsActiveIndex.length > 0 &&
+                        localMenuItem.length > 0 &&
+                        value?.data?.status !== "DEACTIVATED" &&
+                        !associatedAssetFlags?.isOrderInProgress &&
+                        !props.mdmStore!.primaryAssetAndServicesRestrictionFlags
+                          ?.isTransferInProgress && (
+                          <div
+                            className="menuIcon"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              e.preventDefault();
+                            }}
+                            data-testid="associatedAsset-menuDiv-btn"
+                          >
+                            <Menu
+                              model={localMenuItem}
+                              tabIndex={value?.key}
+                              popup
+                              ref={menuRef}
+                              id="popup_menu_left"
+                            />
+                            <i
+                              className={`pi ${
+                                props.mdmStore!
+                                  .isFetchingSelectedCustomerRestrictionFlags ||
+                                props.mdmStore!
+                                  .isFetchingPrimaryAssetAndServicesRestrictionFlags
+                                  ? "pi-spin pi-spinner"
+                                  : "pi pi-ellipsis-v"
+                              } cursorPointer`}
+                              style={{ fontSize: "1rem" }}
+                              data-testid="associatedAsset-menu-btn"
+                              onClick={(e) => {
+                                e.preventDefault();
+                                e.stopPropagation();
+                                associtedAssetMenuSelect(e, menuRef);
+                              }}
+                            ></i>
+                          </div>
+                        )}
+                      {assetsActiveIndex.length === 0 && (
+                        <div className="menuIcon">
+                          <div className="emptyDiv"></div>
+                        </div>
+                      )}
+                    </>
+                  );
+                }
+              })
+            ) : (
+              <div
+                className="menuIcon"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  e.preventDefault();
+                }}
+                data-testid="associatedAsset-menuDivSecond-btn"
+              >
+                <i
+                  className="pi pi-ellipsis-v cursorPointer"
+                  style={{ fontSize: "1rem" }}
+                  data-testid="associatedAsset-menuSecond-btn"
+                  onClick={(e) => associtedAssetMenuSelect(e, menu)}
+                ></i>
+              </div>
+            )}
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  function associtedAssetServiceMenuSelect(e, menuRef) {
+    menuRef.current.toggle(e);
+  }
+
+  function associatedAssetsServiecHeader(
+    value: any,
+    index: number,
+    assetIndex: number
+  ) {
+    let localMenuItem = vasMenuItem(value)();
+    let menuRef: any = React.createRef();
+    return (
+      <div className="serviceHeader" id={value!.key}>
+        <div className="cardHeader">
+          <span className="parentAssetName">
+            {value!.label === "rVAS"
+              ? "rVAS Effective Configuration"
+              : value!.label}
+          </span>
+        </div>
+        <div className="vasCardHeaderMenu">
+          <>
+            {!props.mdmStore!.primaryAssetAndServicesRestrictionFlags
+              ?.isGDASessionActive &&
+              ((props.mdmStore!.isMDMglobalNumberOpen === true &&
+                value!.label === AppConstants.MDM_GLOBAL_NUMBER) ||
+                (props.mdmStore!.isMDMADCOpen === true &&
+                  value!.label === AppConstants.MDM_ADC)) &&
+              value!.label !== AppConstants.MDM_ADC && (
+                <div
+                  className="menuIcon"
+                  onClick={(e) => e.stopPropagation()}
+                  data-testid="vas-menuDiv-btn"
+                >
+                  {localMenuItem?.length > 0 && (
+                    <>
+                      <Menu
+                        model={localMenuItem}
+                        tabIndex={value!.key}
+                        popup
+                        ref={menuRef}
+                        id="popup_menu_left"
+                      />
+                      <i
+                        className={`pi ${
+                          props.mdmStore!
+                            .isFetchingSelectedCustomerRestrictionFlags
+                            ? "pi-spin pi-spinner"
+                            : "pi-ellipsis-v"
+                        } cursorPointer`}
+                        style={{ fontSize: "1rem" }}
+                        data-testid="vas-menu-btn"
+                        onClick={(e) => {
+                          e.preventDefault();
+                          e.stopPropagation();
+                          associtedAssetServiceMenuSelect(e, menuRef);
+                        }}
+                      ></i>
+                    </>
+                  )}
+                </div>
+              )}
+          </>
+        </div>
+      </div>
+    );
+  }
+
+  function scrollToSelection(id) {
+    const element =
+      id === "38233813"
+        ? document.getElementById("MDMAccordion")
+        : document.getElementById(id);
+    if (element) {
+      element.scrollIntoView({
+        block: "start",
+        behavior: "smooth",
+        inline: "nearest",
+      });
+      const elementTop =
+        element.getBoundingClientRect().top + window.pageYOffset;
+      const scrollPosition = elementTop - 24;
+      window.scrollTo({
+        top: scrollPosition,
+        behavior: "smooth",
+      });
+    }
+  }
+
+  function onSelectTreeNode(e) {
+    props.mdmStore!.isUsingUrlParams = false;
+    scrollToSelection(e.node.key);
+    let obj: any;
+    if (e.node.key) {
+      obj = {
+        [e.node.key]: true,
+      };
+      Object.assign(props.mdmStore!.treeExpandedKeys, obj);
+    }
+
+    props.mdmStore?.getSelectedSiteAssociatedAssetsData(e.node.id);
+    props.mdmStore!.isPareantAssetEditable = false;
+    let assetIndex: any = assetsActiveIndex ? [...assetsActiveIndex] : [];
+    let indexArray: any[] = [];
+    props.mdmStore!.accordianData[0].children.map((child, i) => {
+      if (child.key === e.node.key) {
+        if (!assetIndex.includes(i)) {
+          assetIndex.push(i);
+          setAssetsActiveIndex(assetIndex);
+        }
+      }
+      child.children?.map((serviceChild, j) => {
+        if (serviceChild.key === e.node.key) {
+          indexArray.push(j);
+          if (_.isEmpty(props.mdmStore!.activeIndexArray)) {
+            if (i > 0) {
+              for (let k = 0; k <= i; k++) {
+                if (k != i) {
+                  props.mdmStore!.activeIndexArray[k] = [];
+                } else {
+                  props.mdmStore!.activeIndexArray[i] =
+                    props.mdmStore!.activeIndexArray.concat(indexArray);
+                }
+              }
+            } else {
+              props.mdmStore!.activeIndexArray[i] =
+                props.mdmStore!.activeIndexArray.concat(indexArray);
+            }
+          } else if (props.mdmStore!.activeIndexArray[i]) {
+            props.mdmStore!.activeIndexArray[i] =
+              props.mdmStore!.activeIndexArray[i].concat(
+                props.mdmStore!.activeIndexArray.concat(indexArray).slice(-1)
+              );
+          } else {
+            props.mdmStore!.activeIndexArray[i] = props
+              .mdmStore!.activeIndexArray.concat(indexArray)
+              .slice(-1);
+          }
+        }
+      });
+    });
+    getSiteDetails(e);
+    const auditData = {
+      action: `${ActivityLogConstants.USER_NAVIGATED_TO_TAIL} ${e.node.label}`,
+      event: ActivityLogConstants.EVENT_NAVIGATE,
+      reason: ActivityLogConstants.USER_NAVIGATED_TO_TAIL_REASON,
+      data: null,
+    };
+    props.sfStore!.createAuditLog(auditData);
+  }
+
+  function getSiteDetails(e: any) {
+    const customerOnlyRegex = /^\/customers\/([^/]+)$/;
+    const pathRegex = /\/customers\/([^/]+)\/primary-assets\/([^/]+)/;
+    const currentPath = window.location.pathname;
+    let pathMatch = currentPath.match(pathRegex);
+    let customerMatch: any = [];
+    if (!pathMatch) {
+      customerMatch = currentPath.match(customerOnlyRegex);
+      if (customerMatch) {
+        const newPath = `/customers/${customerMatch[1]}/primary-assets/${e.node.id}`;
+        window.history.replaceState(null, "", newPath);
+      }
+    }
+    if (pathMatch && customerMatch.length === 0) {
+      const newPath = currentPath.replace(
+        /\/primary-assets\/([^/]+)/,
+        `/primary-assets/${e.node.id}`
+      );
+      window.history.replaceState(null, "", newPath);
+    }
+
+    if (
+      !_.isEmpty(props.mdmStore?.accordianData) &&
+      props.mdmStore?.accordianData != undefined
+    ) {
+      props.mdmStore?.treeNode?.map((accordianData) => {
+        if (accordianData?.key === e.node.key) {
+          props.mdmStore!.activeIndexArray = [];
+          props.mdmStore!.treeExpandedKeys = {};
+          props.mdmStore!.associatedAssetData = [];
+          props.mdmStore!.selectedSiteMasterID = e.node.id;
+          setAssetsActiveIndex([]);
+          window.scrollTo(0, 0);
+          props.mdmStore!.assetFlag = false;
+          props.sfStore!.isTransferForm = false;
+          props.mdmStore!.mdmMasterOrderRequestType = "";
+          props.mdmStore!.resetValueAddedServiceData(props.sfStore!);
+          // props.mdmStore!.getSelectedCustomerAssetsData(props.mdmStore!.selectedCustomerMasterID, e.node.label, true, e.node.id)
+          props.mdmStore!.getSelectedCustomerAssetsData(
+            props.mdmStore!.selectedCustomerMasterID,
+            true,
+            e.node.id
+          );
+          // scrollToSelection('MDMAccordion');
+        }
+      });
+    }
+  }
+  function notify(severity: string, title: string) {
+    switch (severity) {
+      case "error":
+        toast.error(title);
+        break;
+      default:
+        toast.success(title);
+    }
+  }
+
+  function onTreeExpand(e) {
+    scrollToSelection(e.node.key);
+    props.mdmStore!.getSelectedSiteAssociatedAssetsData(
+      props.mdmStore!.selectedSiteMasterID
+    );
+    let assetIndex: any = assetsActiveIndex ? [...assetsActiveIndex] : [];
+    props.mdmStore!.accordianData[0].children.map((child, i) => {
+      if (child.key === e.node.key) {
+        if (!assetIndex.includes(i)) {
+          assetIndex.push(i);
+          setAssetsActiveIndex(assetIndex);
+        }
+      }
+    });
+    getSiteDetails(e);
+    const auditData = {
+      action: `${ActivityLogConstants.USER_NAVIGATED_TO_TAIL} ${e.node.label}`,
+      event: ActivityLogConstants.EVENT_NAVIGATE,
+      reason: ActivityLogConstants.USER_NAVIGATED_TO_TAIL_REASON,
+      data: null,
+    };
+    props.sfStore!.createAuditLog(auditData);
+  }
+
+  function onTreeCollapse(e) {
+    let assetIndex: any = assetsActiveIndex ? [...assetsActiveIndex] : [];
+    props.mdmStore?.accordianData[0].children.map((child, i) => {
+      if (child.key === e.node.key) {
+        let index = assetIndex.filter((index) => {
+          return index !== i;
+        });
+        setAssetsActiveIndex(index);
+      }
+    });
+  }
+
+  function parentOnTabChnage(e) {
+    setParentActiveIndex(0);
+  }
+
+  function treeAssetOnToggle(e) {
+    props.mdmStore!.treeExpandedKeys = e.value;
+  }
+
+  function assetOnTabChnage(e) {
+    setAssetsActiveIndex(e.index);
+  }
+
+  function assetOnTabOpen(e) {
+    let obj: any;
+    if (e.originalEvent.target.parentNode?.attributes?.tabIndex?.value > -1) {
+      obj = {
+        [e.originalEvent.target.parentNode.attributes.tabIndex.value]: true,
+      };
+      Object.assign(props.mdmStore!.treeExpandedKeys, obj);
+    } else if (
+      e.originalEvent.target.getAttribute("tabindex") > -1 &&
+      e.originalEvent.target.getAttribute("tabindex") != null
+    ) {
+      obj = {
+        [e.originalEvent.target.getAttribute("tabindex")]: true,
+      };
+      Object.assign(props.mdmStore!.treeExpandedKeys, obj);
+    } else if (
+      e.originalEvent.target.parentNode.parentNode.parentNode.getAttribute(
+        "tabindex"
+      ) > -1
+    ) {
+      obj = {
+        [e.originalEvent.target.parentNode.parentNode.parentNode.getAttribute(
+          "tabindex"
+        )]: true,
+      };
+      Object.assign(props.mdmStore!.treeExpandedKeys, obj);
+    }
+    props.mdmStore!.getSelectedSiteAssociatedAssetsData(
+      props.mdmStore!.selectedSiteMasterID
+    );
+  }
+
+  function assetOnTabClose(e) {
+    if (e.originalEvent.target.parentNode?.attributes?.tabIndex?.value > -1) {
+      delete props.mdmStore!.treeExpandedKeys[
+        e.originalEvent.target.parentNode.attributes.tabIndex.value
+      ];
+    } else if (
+      e.originalEvent.target.getAttribute("tabindex") > -1 &&
+      e.originalEvent.target.getAttribute("tabindex") != null
+    ) {
+      delete props.mdmStore!.treeExpandedKeys[
+        e.originalEvent.target.getAttribute("tabindex")
+      ];
+    } else if (
+      e.originalEvent.target.parentNode.parentNode.parentNode.getAttribute(
+        "tabindex"
+      ) > -1
+    ) {
+      delete props.mdmStore!.treeExpandedKeys[
+        e.originalEvent.target.parentNode.parentNode.parentNode.getAttribute(
+          "tabindex"
+        )
+      ];
+    }
+  }
+
+  function servicesOnTabOpen(e) {
+    let indexArray: any[] = [];
+    props.mdmStore?.accordianData[0].children.map((child, i) => {
+      child.children.map((serviceChild, j) => {
+        if (
+          e.originalEvent.target.parentNode.tabIndex > -1 &&
+          parseInt(serviceChild.key) ===
+            e.originalEvent.target.parentNode.tabIndex
+        ) {
+          indexArray.push(j);
+          if (_.isEmpty(props.mdmStore?.activeIndexArray)) {
+            if (i > 0) {
+              for (let k = 0; k <= i; k++) {
+                if (k != i) {
+                  props.mdmStore!.activeIndexArray[k] = [];
+                } else {
+                  props.mdmStore!.activeIndexArray[i] =
+                    props.mdmStore!.activeIndexArray.concat(indexArray);
+                }
+              }
+            } else {
+              props.mdmStore!.activeIndexArray[i] =
+                props.mdmStore!.activeIndexArray.concat(indexArray);
+            }
+          } else if (props.mdmStore?.activeIndexArray[i] === undefined) {
+            for (let k = 0; k <= i; k++) {
+              if (props.mdmStore?.activeIndexArray[k] === undefined) {
+                props.mdmStore!.activeIndexArray[k] = [];
+              }
+            }
+            props.mdmStore!.activeIndexArray[i] =
+              props.mdmStore!.activeIndexArray[i].concat(
+                props.mdmStore!.activeIndexArray.concat(indexArray).slice(-1)
+              );
+          } else {
+            props.mdmStore!.activeIndexArray[i] =
+              props.mdmStore!.activeIndexArray[i].concat(
+                props.mdmStore!.activeIndexArray.concat(indexArray).slice(-1)
+              );
+            // props.mdmStore!.activeIndexArray[i] = props.mdmStore?.activeIndexArray.concat(indexArray).slice(-1)
+          }
+        } else if (
+          e.originalEvent.target.getAttribute("tabindex") > -1 &&
+          serviceChild.key === e.originalEvent.target.getAttribute("tabindex")
+        ) {
+          indexArray.push(j);
+          if (_.isEmpty(props.mdmStore?.activeIndexArray)) {
+            if (i > 0) {
+              for (let k = 0; k <= i; k++) {
+                if (k != i) {
+                  props.mdmStore!.activeIndexArray[k] = [];
+                } else {
+                  props.mdmStore!.activeIndexArray[i] =
+                    props.mdmStore!.activeIndexArray.concat(indexArray);
+                }
+              }
+            } else {
+              props.mdmStore!.activeIndexArray[i] =
+                props.mdmStore!.activeIndexArray.concat(indexArray);
+            }
+          } else if (props.mdmStore?.activeIndexArray[i] === undefined) {
+            for (let k = 0; k <= i; k++) {
+              if (props.mdmStore?.activeIndexArray[k] === undefined) {
+                props.mdmStore!.activeIndexArray[k] = [];
+              }
+            }
+            props.mdmStore!.activeIndexArray[i] =
+              props.mdmStore!.activeIndexArray[i].concat(
+                props.mdmStore!.activeIndexArray.concat(indexArray).slice(-1)
+              );
+          } else {
+            props.mdmStore!.activeIndexArray[i] =
+              props.mdmStore!.activeIndexArray[i].concat(
+                props.mdmStore!.activeIndexArray.concat(indexArray).slice(-1)
+              );
+            // props.mdmStore!.activeIndexArray[i] = props.mdmStore?.activeIndexArray.concat(indexArray).slice(-1)
+          }
+        } else if (
+          e.originalEvent.target.parentNode.parentNode.parentNode.getAttribute(
+            "tabindex"
+          ) > -1 &&
+          serviceChild.key ===
+            e.originalEvent.target.parentNode.parentNode.parentNode.getAttribute(
+              "tabindex"
+            )
+        ) {
+          indexArray.push(j);
+          if (_.isEmpty(props.mdmStore?.activeIndexArray)) {
+            if (i > 0) {
+              for (let k = 0; k <= i; k++) {
+                if (k != i) {
+                  props.mdmStore!.activeIndexArray[k] = [];
+                } else {
+                  props.mdmStore!.activeIndexArray[i] =
+                    props.mdmStore!.activeIndexArray.concat(indexArray);
+                }
+              }
+            } else {
+              props.mdmStore!.activeIndexArray[i] =
+                props.mdmStore!.activeIndexArray.concat(indexArray);
+            }
+          } else if (props.mdmStore!.activeIndexArray[i] === undefined) {
+            for (let k = 0; k <= i; k++) {
+              if (props.mdmStore!.activeIndexArray[k] === undefined) {
+                props.mdmStore!.activeIndexArray[k] = [];
+              }
+            }
+            props.mdmStore!.activeIndexArray[i] =
+              props.mdmStore!.activeIndexArray[i].concat(
+                props.mdmStore!.activeIndexArray.concat(indexArray).slice(-1)
+              );
+          } else {
+            props.mdmStore!.activeIndexArray[i] =
+              props.mdmStore!.activeIndexArray[i].concat(
+                props.mdmStore!.activeIndexArray.concat(indexArray).slice(-1)
+              );
+            // props.mdmStore!.activeIndexArray[i] = props.mdmStore?.activeIndexArray.concat(indexArray).slice(-1)
+          }
+        }
+      });
+    });
+  }
+
+  function servicesOnTabClose(e) {
+    props.mdmStore?.accordianData[0].children.map((child, i) => {
+      child.children.map((serviceChild, j) => {
+        if (
+          e.originalEvent.target.parentNode.tabIndex > -1 &&
+          parseInt(serviceChild.key) ===
+            e.originalEvent.target.parentNode.tabIndex
+        ) {
+          props.mdmStore!.activeIndexArray[i] =
+            props.mdmStore!.activeIndexArray[i].filter((index) => {
+              return index !== j;
+            });
+        } else if (
+          e.originalEvent.target.getAttribute("tabindex") > -1 &&
+          serviceChild.key === e.originalEvent.target.getAttribute("tabindex")
+        ) {
+          props.mdmStore!.activeIndexArray[i] =
+            props.mdmStore!.activeIndexArray[i].filter((index) => {
+              return index !== j;
+            });
+        } else if (
+          e.originalEvent.target.parentNode.parentNode.parentNode.getAttribute(
+            "tabindex"
+          ) > -1 &&
+          serviceChild.key ===
+            e.originalEvent.target.parentNode.parentNode.parentNode.getAttribute(
+              "tabindex"
+            )
+        ) {
+          props.mdmStore!.activeIndexArray[i] =
+            props.mdmStore!.activeIndexArray[i].filter((index) => {
+              return index !== j;
+            });
+        }
+      });
+    });
+  }
+
+  function returnComponant(
+    serviceChild: any,
+    j: number,
+    assetIndex: number,
+    child: any
+  ) {
+    switch (serviceChild.label) {
+      case AppConstants.MDM_RVAS:
+        return <MDMRVAS />;
+      case AppConstants.MDM_GLOBAL_NUMBER:
+        return <MDMGlobalNumber />;
+      case AppConstants.MDM_GDA:
+        return <GoDirectAccess />;
+      case AppConstants.MDM_ADC:
+        return <AdvancedDataControl />;
+      case AppConstants.MDM_ACARS:
+        return <ACARSConfiguration siteMasterId={serviceChild.id} />;
+      case AppConstants.MDM_ADDITIONAL_SERVICES:
+        return <AdditionalServices siteMasterId={serviceChild.id} />;
+      case AppConstants.MDM_COUNTRY_AUTHORIZATION:
+        return <CountryAuthorization siteMasterId={serviceChild.id} />;
+      default:
+        return (
+          <div className="text-sm font-bold content-msg flex align-items-center justify-content-center">
+            {AppConstants.MDM_NO_CONFIG}
+          </div>
+        );
+    }
+  }
+
+  function nodeTemplate(node) {
+    const status = node.data?.status;
+    let statusClass = "";
+    let labelStyle: React.CSSProperties = {};
+
+    if (status === "INACTIVE" || node.data?.showDeactiveStatus) {
+      statusClass = "tree-node-active";
+      labelStyle = { color: "#C02531" };
+    } else if (status === "ACTIVE") {
+      statusClass = "tree-node-completed";
+      labelStyle = { color: "black" };
+    }
+
+    if (props.mdmStore?.selectedKey === node.key) {
+      labelStyle.fontWeight = "bold";
+    }
+
+    return (
+      <span className={`tree-node-label ${statusClass}`} style={labelStyle}>
+        {node.label}
+      </span>
+    );
+  }
+  const togglerTemplate = (node, options) => {
+    if (!node) {
+      return;
+    }
+
+    const expanded = options.expanded;
+    const status = node.data?.status;
+    let togglerStyle: React.CSSProperties = {};
+
+    if (status === "INACTIVE") {
+      togglerStyle = { color: "#C02531" };
+    } else if (status === "ACTIVE") {
+      togglerStyle = { color: "black" };
+    }
+
+    const iconClassName = classNames("p-tree-toggler-icon pi pi-fr", {
+      "pi-chevron-right": !expanded,
+      "pi-chevron-down": expanded,
+    });
+
+    return (
+      <button
+        type="button"
+        className="p-tree-toggler p-link"
+        tabIndex={-1}
+        onClick={options.onClick}
+      >
+        <span
+          className={iconClassName}
+          style={togglerStyle}
+          aria-hidden="true"
+        ></span>
+      </button>
+    );
+  };
+
+  const dateBodyTemplate = (rowData: any, key?: string) => {
+    if (!rowData) {
+      return <></>;
+    }
+    let date = props.sfStore!.formatDate(
+      rowData[key !== undefined ? key : "startDate"]
+    );
+    return <label>{date}</label>;
+  };
+
+  const textBodyTemplate = (rowData: any, field: string) => {
+    const text = rowData[field];
+    if (!text) return "-";
+
+    const items = text
+      .split(",")
+      .map((item) => item.trim())
+      .filter((item) => item);
+    const displayItems = items.slice(0, 2);
+    const hasMore = items.length > 2;
+
+    return (
+      <div
+        className="truncated-text-container"
+        title={items.join("\n")}
+        style={{
+          maxWidth: "200px",
+          cursor: "pointer",
+          lineHeight: "1.3",
+        }}
+      >
+        {displayItems.map((item, index) => (
+          <div
+            key={index}
+            style={{
+              marginBottom: index < displayItems.length - 1 ? "2px" : "0",
+            }}
+          >
+            {item}
+          </div>
+        ))}
+        {hasMore && (
+          <div
+            style={{
+              fontSize: "11px",
+              color: "#666",
+              fontStyle: "italic",
+              marginTop: "2px",
+            }}
+          >
+            +{items.length - 2} more...
+          </div>
+        )}
+      </div>
+    );
+  };
+
+  const vasConfigHistoryColumns = () => {
+    return [
+      {
+        field: "level",
+        header: "Level",
+        bodyStyle: { whiteSpace: "normal" },
+        show: true,
+      },
+      {
+        field: "assetServiceName",
+        header: "Service",
+        bodyStyle: { whiteSpace: "normal", textAlign: "center" },
+        show: true,
+      },
+      {
+        field: "assetServiceIdentifier",
+        header: "Identifier",
+        bodyStyle: { whiteSpace: "normal" },
+        show: true,
+      },
+      {
+        field: "subnet",
+        header: "IP",
+        bodyStyle: { whiteSpace: "normal" },
+        show: true,
+      },
+      {
+        field: "status",
+        header: "Status",
+        bodyStyle: { whiteSpace: "normal" },
+        show: true,
+      },
+      {
+        field: "startDate",
+        header: "Start Date",
+        bodyStyle: { whiteSpace: "normal" },
+        show: true,
+      },
+      {
+        field: "endDate",
+        header: "End Date",
+        bodyStyle: { whiteSpace: "normal" },
+        show: true,
+      },
+      {
+        field: "createdBy",
+        header: "Created By",
+        bodyStyle: { whiteSpace: "normal" },
+        show: true,
+      },
+      {
+        field: "filters",
+        header: "Filters",
+        bodyStyle: { whiteSpace: "normal" },
+        show: true,
+        body: (rowData) => textBodyTemplate(rowData, "filters"),
+      },
+      {
+        field: "regionAndCountryLock",
+        header: "Region & Country Lock",
+        bodyStyle: { whiteSpace: "normal" },
+        show: true,
+        body: (rowData) => textBodyTemplate(rowData, "regionAndCountryLock"),
+      },
+      {
+        field: "datastreamValues",
+        header: "Data Stream Values",
+        bodyStyle: { whiteSpace: "normal" },
+        show: true,
+        body: (rowData) => textBodyTemplate(rowData, "datastreamValues"),
+      },
+    ];
+  };
+
+  const globalNumberHistoryColumns = () => {
+    const columns = [
+      {
+        field: "tailNumber",
+        header: "Tail Number",
+        bodyStyle: { whiteSpace: "normal" },
+        show: true,
+      },
+      {
+        field: "globalNumber",
+        header: "Global Number",
+        sortingFlag: true,
+        bodyStyle: { whiteSpace: "normal" },
+        show: true,
+      },
+      {
+        field: "tollFreeNumber",
+        header: "Toll Free Number",
+        body: (rowData) =>
+          rowData.tollFreeNumber != null ? rowData.tollFreeNumber : "N/A",
+        bodyStyle: { whiteSpace: "normal" },
+        show: true,
+      },
+      {
+        field: "activationStatus",
+        header: "Status",
+        bodyStyle: { whiteSpace: "normal" },
+        show: true,
+      },
+      {
+        field: "startDate",
+        sortingFlag: true,
+        header: "Start Date",
+        bodyStyle: { whiteSpace: "normal" },
+        show: true,
+        body: (rowData) => dateBodyTemplate(rowData, "startDate"),
+      },
+      {
+        field: "endDate",
+        sortingFlag: true,
+        header: "End Date",
+        bodyStyle: { whiteSpace: "normal" },
+        show: true,
+        body: (rowData) => dateBodyTemplate(rowData, "endDate"),
+      },
+    ];
+    return columns;
+  };
+
+  const [isOpen, setIsOpen] = useState(true);
+
+  return (
+    <div className="grid treeNode">
+      <HistoryDialog
+        records={(() => {
+          switch (true) {
+            case props.mdmStore!.isGlobalNumberHistoryModelOpen:
+              return props.mdmStore!.vasGlobalNumberHistoryData;
+            case props.mdmStore!.isVasHistoryModelOpen:
+              // Attempt to fetch default (tail-wide) history; if not present but filtered keys exist, merge them for display
+              const baseKey = props.mdmStore!.selectedSiteMasterID!.toString();
+              if (props.mdmStore!.vasHistoryData.has(baseKey)) {
+                return props.mdmStore!.vasHistoryData.get(baseKey);
+              }
+              // If no base key, aggregate any keys starting with baseKey
+              const aggregated: any[] = [];
+              props.mdmStore!.vasHistoryData.forEach((val, key) => {
+                if (key.startsWith(baseKey + "|")) {
+                  aggregated.push(...val);
+                }
+              });
+              return aggregated.length ? aggregated : undefined;
+            default:
+              return [];
+          }
+        })()}
+        headerTitle={props.mdmStore!.selectedHistoryModelTitle}
+        isHistoryModelOpen={
+          props.mdmStore!.isGlobalNumberHistoryModelOpen ||
+          props.mdmStore!.isVasHistoryModelOpen
+        }
+        fetchData={() => {
+          switch (true) {
+            case props.mdmStore!.isGlobalNumberHistoryModelOpen:
+              return props.mdmStore!.getGlobalNumberHistoryData();
+            case props.mdmStore!.isVasHistoryModelOpen:
+              // Fetch with any previously set filters (from rVAS record click)
+              return props.mdmStore!.getVasHistoryData();
+            default:
+              return;
+          }
+        }}
+        customColumns={
+          props.mdmStore!.isGlobalNumberHistoryModelOpen
+            ? globalNumberHistoryColumns()
+            : props.mdmStore!.isVasHistoryModelOpen
+            ? vasConfigHistoryColumns()
+            : undefined
+        }
+        defaultSortField={
+          props.mdmStore!.isGlobalNumberHistoryModelOpen ? "startDate" : "time"
+        }
+        defaultSortOrder={-1}
+      />
+      <Loader
+        text={"loading...."}
+        loading={props.mdmStore?.isSelectedCustomerAssetserchingData}
+        className={"inline-srf-loader"}
+      />
+      {props.mdmStore?.isSelectedCustomerAssetserchingData ||
+      !_.isEmpty(props.mdmStore?.siteInformationResponse) ? (
+        <>
+          {!props.mdmStore?.isSelectedCustomerAssetserchingData &&
+            (!_.isEmpty(props.mdmStore?.treeNode) &&
+            !_.isEmpty(props.mdmStore?.accordianData) ? (
+              <>
+                  <div className="treeWidthWithScreen">
+
+                  <div className="text-center border-round-sm font-bold treeWidth">
+                    <Tree
+                      value={props.mdmStore?.treeNode}
+                      className="col-12 md:col-12"
+                      selectionMode="single"
+                      filter
+                      filterMode="lenient"
+                      selectionKeys={props.mdmStore?.selectedKey}
+                      onExpand={onTreeExpand}
+                      onCollapse={onTreeCollapse}
+                      onSelect={onSelectTreeNode}
+                      onSelectionChange={(e: any) =>
+                        (props.mdmStore!.selectedKey = e.value)
+                      }
+                      expandedKeys={props.mdmStore?.treeExpandedKeys}
+                      nodeTemplate={nodeTemplate}
+                      togglerTemplate={togglerTemplate}
+                      onToggle={treeAssetOnToggle}
+                      filterValue={treeFilterValue.trim()}
+                      onFilterValueChange={(e) => setTreeFilterValue(e.value)}
+                      filterTemplate={() => {
+                        return (
+                          <>
+                            <div className="treeHeader">
+                              <div className="treeHeaderSearch">
+                                <i className="pi pi-search"></i>
+                                <InputText
+                                  value={treeFilterValue}
+                                  placeholder="Search by Asset Name"
+                                  className="w-full"
+                                  onChange={(e) =>
+                                    setTreeFilterValue(e.target.value)
+                                  }
+                                  onKeyDown={(e) => {
+                                    if (e.key === "Enter") {
+                                      e.preventDefault();
+                                      e.stopPropagation();
+                                    }
+                                  }}
+                                />
+                              </div>
+                            </div>
+                          </>
+                        );
+                      }}
+                    />
+                  </div>
+                </div>
+                <div className="assetInfoWidth" id="MDMAccordion">
+                  <div className="border-round-sm  font-bold parentAssetInfoDiv">
+                    <Accordion
+                      activeIndex={parentActiveIndex}
+                      collapseIcon=" "
+                      onTabChange={parentOnTabChnage}
+                      onTabOpen={assetOnTabOpen}
+                      onTabClose={assetOnTabClose}
+                    >
+                      <AccordionTab
+                        headerTemplate={accordianHeader(
+                          "Primary Asset Information"
+                        )}
+                        contentClassName="pai"
+                        tabIndex={
+                          !_.isEmpty(props.mdmStore?.accordianData) &&
+                          props.mdmStore?.accordianData != undefined &&
+                          props.mdmStore?.accordianData[0]?.key
+                        }
+                        className={
+                          props.mdmStore?.selectedCustomerAssetData?.status ===
+                          "INACTIVE"
+                            ? "deativatedParentAssetCSS"
+                            : "accordianHeaderCursor"
+                        }
+                      >
+                        <ParentAssetInformation />
+                        <Accordion
+                          multiple
+                          activeIndex={assetsActiveIndex}
+                          onTabChange={assetOnTabChnage}
+                          onTabOpen={assetOnTabOpen}
+                          onTabClose={assetOnTabClose}
+                          data-testid="assetAccorian"
+                        >
+                          {!_.isEmpty(props.mdmStore?.accordianData) &&
+                            props.mdmStore?.accordianData != undefined &&
+                            props.mdmStore?.accordianData[0]?.children?.map(
+                              (child, i) => {
+                                return (
+                                  <AccordionTab
+                                    headerTemplate={associatedAssetsHeader(
+                                      child
+                                    )}
+                                    tabIndex={child?.key}
+                                    data-testid="associateAssetAccorian"
+                                    key={child?.key}
+                                    className={
+                                      child?.data?.showDeactiveStatus
+                                        ? "deativatedParentAssetCSS"
+                                        : ""
+                                    }
+                                  >
+                                    {!_.isEmpty(associtedAssetsInformation) &&
+                                    associtedAssetsInformation != undefined ? (
+                                      associtedAssetsInformation?.map(
+                                        (asset) => {
+                                          if (
+                                            asset?.assetId &&
+                                            child?.data?.assetId ===
+                                              asset.assetId
+                                          ) {
+                                            return (
+                                              <div key={i}>
+                                                <AssociatedAssetsInformation
+                                                  asset={
+                                                    asset?.associatedAssetDetails
+                                                  }
+                                                  assetId={asset.assetId}
+                                                />
+                                                <MDMAssetServicesInformation
+                                                  siteMasterID={
+                                                    props.mdmStore
+                                                      ?.selectedSiteMasterID
+                                                  }
+                                                  assetId={asset.assetId}
+                                                  assetData={child}
+                                                />
+                                              </div>
+                                            );
+                                          }
+                                        }
+                                      )
+                                    ) : (
+                                      <Loader
+                                        text={"loading...."}
+                                        loading={
+                                          child?.label !==
+                                            "Value Added Services" &&
+                                          props.mdmStore
+                                            ?.isFetchingMDMAssociatedAssetsData
+                                        }
+                                        className={"associatedAssetLoader"}
+                                      />
+                                    )}
+                                    {
+                                      child?.children != null &&
+                                        !_.isEmpty(child?.children) && (
+                                          // <Accordion multiple data-testid='vasAccorian' activeIndex={!_.isEmpty(props.mdmStore?.activeIndexArray) ? props.mdmStore?.activeIndexArray[i] : []} onTabChange={() => { }} onTabOpen={servicesOnTabOpen} onTabClose={servicesOnTabClose}>
+                                          <>
+                                            {child?.children?.map(
+                                              (serviceChild, j) => {
+                                                if (
+                                                  child?.label ===
+                                                  "Value Added Services"
+                                                ) {
+                                                  return (
+                                                    // <AccordionTab headerTemplate={associatedAssetsServiecHeader(serviceChild, j, i)} tabIndex={serviceChild?.key}>
+                                                    //     {returnComponant(serviceChild, j, i, child)}
+                                                    // </AccordionTab>
+                                                    <Card
+                                                      className="serviceCard"
+                                                      header={associatedAssetsServiecHeader(
+                                                        serviceChild,
+                                                        j,
+                                                        i
+                                                      )}
+                                                    >
+                                                      {returnComponant(
+                                                        serviceChild,
+                                                        j,
+                                                        i,
+                                                        child
+                                                      )}
+                                                    </Card>
+                                                  );
+                                                }
+                                              }
+                                            )}
+                                          </>
+                                        )
+                                      // </Accordion>
+                                    }
+                                  </AccordionTab>
+                                );
+                              }
+                            )}
+                        </Accordion>
+                      </AccordionTab>
+                    </Accordion>
+                  </div>
+                </div>
+              </>
+            ) : (
+              <div className="noAssetData">
+                {props.mdmStore!.isUsingUrlParams &&
+                !props.mdmStore!.checkForValidId(primaryAssetId)
+                  ? AppConstants.ASSETID_MISMATCH_TEXT
+                  : AppConstants.NO_ASSETDATA_TEXT}
+              </div>
+            ))}
+        </>
+      ) : (
+        <div className="ErrorMsg">
+          <span>{AppConstants.MDM_ASSETS_API_FAILED}</span>
+        </div>
+      )}
+    </div>
+  );
+});
+
+export default inject(
+  "routerStore",
+  "mdmStore",
+  "sfStore",
+  "gdaStore"
+)(MDMAssetInformation);
