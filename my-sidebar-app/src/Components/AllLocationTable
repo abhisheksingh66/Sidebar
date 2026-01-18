@@ -1,0 +1,58 @@
+import React from "react";
+import "./allLocationsTable.css";
+
+export type LocationRow = {
+  location: string;
+  JX?: boolean;
+  GX?: boolean;
+  G2X?: boolean;
+  SBB?: boolean;
+  Swift64?: boolean;
+  Iridium?: boolean;
+};
+
+type Props = {
+  rows: LocationRow[];
+  filterText?: string;
+};
+
+const Check = () => <span className="check">✔</span>;
+
+const AllLocationsTable = ({ rows, filterText = "" }: Props) => {
+  const filtered = rows.filter((row) =>
+    row.location.toLowerCase().includes(filterText.toLowerCase())
+  );
+
+  return (
+    <div className="table-wrapper">
+      <table>
+        <thead>
+          <tr>
+            <th>Location</th>
+            <th>JX</th>
+            <th>GX</th>
+            <th>G2X</th>
+            <th>SBB</th>
+            <th>Swift64</th>
+            <th>Iridium</th>
+          </tr>
+        </thead>
+        <tbody>
+          {filtered.map((row) => (
+            <tr key={row.location}>
+              <td className="link">{row.location}</td>
+              <td>{row.JX && <Check />}</td>
+              <td>{row.GX && <Check />}</td>
+              <td>{row.G2X && <Check />}</td>
+              <td>{row.SBB && <Check />}</td>
+              <td>{row.Swift64 && <Check />}</td>
+              <td>{row.Iridium && <Check />}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  );
+};
+
+export default AllLocationsTable;
