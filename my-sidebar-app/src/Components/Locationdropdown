@@ -1,0 +1,83 @@
+import { useState, useRef, useEffect } from "react";
+import { InputText } from "primereact/inputtext";
+import AllLocationsTable from "./AllLocationsTable";
+import { treeNode } from "../treeNode";
+import { createLocationRows } from "../utils/convertTreeNode";
+
+const LocationsDropdown = () => {
+  const [showAllPanel, setShowAllPanel] = useState(false);
+  const [treeFilterValue, setTreeFilterValue] = useState("");
+  const dropdownRef = useRef<HTMLDivElement>(null);
+
+  const locationRows = createLocationRows(treeNode);
+
+  useEffect(() => {
+    const handleClickOutside = (e: MouseEvent) => {
+      if (dropdownRef.current && !dropdownRef.current.contains(e.target as Node)) {
+        setShowAllPanel(false);
+      }
+    };
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, []);
+
+  return (
+    <div ref={dropdownRef} style={{ position: "relative", width: "280px" }}>
+      <button
+        onClick={() => setShowAllPanel((prev) => !prev)}
+        style={{
+          width: "100%",
+          padding: "6px 10px",
+          border: "1px solid #666",
+          backgroundColor: "#fff",
+          fontWeight: 600,
+          cursor: "pointer",
+          display: "flex",
+          justifyContent: "space-between",
+          alignItems: "center",
+        }}
+      >
+        All
+        <span style={{ fontSize: "12px" }}>▼</span>
+      </button>
+
+      {showAllPanel && (
+        <div
+          style={{
+            position: "absolute",
+            top: "100%",
+            left: 0,
+            width: "700px",
+            maxHeight: "400px",
+            overflow: "auto",
+            border: "1px solid #666",
+            backgroundColor: "#fff",
+            zIndex: 10,
+            padding: "8px",
+          }}
+        >
+          <div
+            style={{
+              display: "flex",
+              alignItems: "center",
+              gap: "6px",
+              marginBottom: "8px",
+            }}
+          >
+            <i className="pi pi-search" />
+            <InputText
+              value={treeFilterValue}
+              placeholder="Search by Asset Name"
+              style={{ width: "100%" }}
+              onChange={(e) => setTreeFilterValue(e.target.value)}
+            />
+          </div>
+
+          <AllLocationsTable rows={locationRows} filterText={treeFilterValue} />
+        </div>
+      )}
+    </div>
+  );
+};
+
+export default LocationsDropdown;
