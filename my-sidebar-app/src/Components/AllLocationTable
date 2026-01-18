@@ -1,5 +1,4 @@
 import React from "react";
-import "./allLocationsTable.css";
 
 export type LocationRow = {
   location: string;
@@ -24,34 +23,84 @@ const AllLocationsTable = ({ rows, filterText = "" }: Props) => {
   );
 
   return (
-    <div className="table-wrapper">
-      <table>
-        <thead>
-          <tr>
-            <th>Location</th>
-            <th>JX</th>
-            <th>GX</th>
-            <th>G2X</th>
-            <th>SBB</th>
-            <th>Swift64</th>
-            <th>Iridium</th>
-          </tr>
-        </thead>
-        <tbody>
-          {filtered.map((row) => (
-            <tr key={row.location}>
-              <td className="link">{row.location}</td>
-              <td>{row.JX && <Check />}</td>
-              <td>{row.GX && <Check />}</td>
-              <td>{row.G2X && <Check />}</td>
-              <td>{row.SBB && <Check />}</td>
-              <td>{row.Swift64 && <Check />}</td>
-              <td>{row.Iridium && <Check />}</td>
+    <>
+      <style>
+        {`
+        .table-wrapper {
+          width: 100%;
+          overflow-x: auto;
+
+          table {
+            width: 100%;
+            border-collapse: collapse;
+            background: #fff;
+            font-size: 14px;
+
+            th, td {
+              border: 1px solid #ddd;
+              padding: 10px;
+              text-align: center;
+            }
+
+            th {
+              background: #f5f5f5;
+              font-weight: 600;
+            }
+
+            tbody tr:hover {
+              background: #f9fafb;
+            }
+
+            .link {
+              color: #0073e6;
+              cursor: pointer;
+              text-align: left;
+              font-weight: 500;
+
+              &:hover {
+                text-decoration: underline;
+              }
+            }
+
+            .check {
+              color: green;
+              font-weight: bold;
+              font-size: 16px;
+            }
+          }
+        }
+        `}
+      </style>
+
+      <div className="table-wrapper">
+        <table>
+          <thead>
+            <tr>
+              <th>Location</th>
+              <th>JX</th>
+              <th>GX</th>
+              <th>G2X</th>
+              <th>SBB</th>
+              <th>Swift64</th>
+              <th>Iridium</th>
             </tr>
-          ))}
-        </tbody>
-      </table>
-    </div>
+          </thead>
+          <tbody>
+            {filtered.map((row) => (
+              <tr key={row.location}>
+                <td className="link">{row.location}</td>
+                <td>{row.JX && <Check />}</td>
+                <td>{row.GX && <Check />}</td>
+                <td>{row.G2X && <Check />}</td>
+                <td>{row.SBB && <Check />}</td>
+                <td>{row.Swift64 && <Check />}</td>
+                <td>{row.Iridium && <Check />}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </>
   );
 };
 
