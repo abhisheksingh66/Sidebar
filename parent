@@ -1,0 +1,456 @@
+import { RouterStore } from "mobx-router5";
+import MDMStore from "../../../stores/MDMStore/MDMStore";
+import { inject, observer } from "mobx-react";
+import "./../ParentAssetInfomation/ParentAssetInfomation.scss";
+import AppConstants from "../../../stores/Constants/AppConstants";
+import SmartForm from "../../../models/SmartForm";
+import SmartFormStore from "../../../stores/SmartFormStore/SmartFormStore";
+import Field from "../../../models/IField";
+import { Tooltip } from "primereact/tooltip";
+import { previousProviderOptions } from "../../AccountInfo/AssetInformation/AssetInformation";
+import Select from "../../../components/FormInputs/Select/Select";
+import InputTxt from "../../../components/FormInputs/InputText/InputTxt";
+import AutoSuggestComponent from "../../../components/FormInputs/AutoSuggest/AutoSuggestComponent";
+import { useEffect, useState } from "react";
+import MultiSelectInput from "../../../components/FormInputs/MultiSelectInput/MultiSelectInput";
+
+interface IParentAssetInformation {
+    mdmStore?: MDMStore;
+    routerStore?: RouterStore;
+    sfStore?: SmartFormStore
+}
+
+const ParentAssetInformation = observer((props: IParentAssetInformation) => {
+    const currentRoute = props.routerStore?.route?.name || "";
+    if (![AppConstants.MDM_PARENT_ASSET_RN, AppConstants.MDM_PARENT_ASSET_NEW_RN,AppConstants.MDM_PARENT_ASSET_NEW_2_RN].includes(currentRoute!)) return null;
+    const [aesid, setAesid] = useState("");
+    const [assetNumber, setAssetNumber] = useState("");
+    const [icao, setIcaoField] = useState("");
+    const [typeOfUse, setTypeOfUseField] = useState("");
+    const [privousProvoider, setPrivousProvoiderField] = useState("");
+    const [reseller, setReseller] = useState([]);
+    const [serviceCategory, setServiceCategory] = useState<Array<any>>([]);
+
+    let fields: Map<string, Field>;
+    fields = props.sfStore?.getCurrScreen(AppConstants.MDM_PARENT_ASSET_RN).fields!;
+    const assetNumberField = fields?.get(AppConstants.PRIMARY_ASSET);
+    // const primaryCallSignField = fields!.get(AppConstants.PRIMARY_ASSET_CALLSIGN);
+    const parentAssetTypeField = fields!.get(AppConstants.PRIMARY_ASSET_TYPE);
+    const parentAssetManufacturerField = fields!.get(AppConstants.PRIMARY_ASSET_MANUFACTURER);
+    const parentAssetModelField = fields!.get(AppConstants.PRIMARY_ASSET_MODEL);
+    const parentAssetIdentifierValueField = fields!.get(AppConstants.PRIMARY_ASSET_IDENTIFIER_VALUE);
+    const aesidField = fields!.get(AppConstants.AESID);
+    const icaoField = fields!.get(AppConstants.HOME_AIRPORT_ICAO_CODE);
+    const typeOfUseField = fields!.get(AppConstants.TYPE_OF_USE);
+    const privousProvoiderField = fields!.get(AppConstants.PREVIOUS_PROVIDER);
+    const serviceCategoryField = fields!.get(AppConstants.SERVICE_CATEGORY);
+    const parentAssetResellerField = fields!.get(AppConstants.RESELLER);
+
+    parentAssetTypeField!.value = props.mdmStore?.seletedAssetResponse?.type ? props.mdmStore?.seletedAssetResponse?.type : "";
+    parentAssetManufacturerField!.value = props.mdmStore?.seletedAssetResponse?.model?.manufacturer?.name ? props.mdmStore?.seletedAssetResponse?.model?.manufacturer?.name : "";
+    parentAssetModelField!.value = props.mdmStore?.seletedAssetResponse?.model?.name ? props.mdmStore?.seletedAssetResponse?.model?.name : "";
+    parentAssetIdentifierValueField!.value = props.mdmStore?.seletedAssetResponse?.identifierValue ? props.mdmStore?.seletedAssetResponse?.identifierValue : "";
+
+    useEffect(() => {
+        if (props.mdmStore) {
+            const parentAssetManufacturerId = props.sfStore!.siteManufacturers?.find(
+                (siteManufacturers) => siteManufacturers?.assetmanufacturername === props.mdmStore!.seletedAssetResponse?.model?.manufacturer?.name);
+            if (parentAssetManufacturerId) {
+                props.sfStore!.getAssetModel(parentAssetManufacturerId?.id);
+            }
+            props.sfStore!.parentAssetErrorMsg = '';
+            assetNumberField!.error = "";
+            props.mdmStore!.resetParentAssetFields(fields);
+            aesidField!.value = props.mdmStore.seletedAssetResponse?.icao ? props.mdmStore.seletedAssetResponse?.icao : "";
+            icaoField!.value = props.mdmStore.seletedAssetResponse?.homeAirportCode ? props.mdmStore.seletedAssetResponse?.homeAirportCode : "";
+            typeOfUseField!.value = props.mdmStore.seletedAssetResponse?.typeOfUse ? props.mdmStore.seletedAssetResponse?.typeOfUse : "";
+            privousProvoiderField!.value = props.mdmStore.seletedAssetResponse?.previousProvider ? props.mdmStore.seletedAssetResponse?.previousProvider : "";
+            parentAssetResellerField!.value = props.mdmStore.seletedAssetResponse?.reseller ? props.mdmStore.seletedAssetResponse?.reseller : "";
+            serviceCategoryField!.value = props.mdmStore.seletedAssetResponse?.serviceCategory ? props.mdmStore.seletedAssetResponse?.serviceCategory : "";
+            assetNumberField!.value = props.mdmStore.seletedAssetResponse?.name ? props.mdmStore.seletedAssetResponse?.name : "";
+            setAesid(props.mdmStore.seletedAssetResponse?.icao ? props.mdmStore.seletedAssetResponse?.icao : "");
+            setIcaoField(props.mdmStore.seletedAssetResponse?.homeAirportCode ? props.mdmStore.seletedAssetResponse?.homeAirportCode : "");
+            setTypeOfUseField(props.mdmStore.seletedAssetResponse?.typeOfUse ? props.mdmStore.seletedAssetResponse?.typeOfUse : "");
+            setPrivousProvoiderField(props.mdmStore.seletedAssetResponse?.previousProvider ? props.mdmStore.seletedAssetResponse?.previousProvider : "");
+            setReseller(props.mdmStore.seletedAssetResponse?.reseller ? props.mdmStore.seletedAssetResponse?.reseller : []);
+            setServiceCategory(props.mdmStore.seletedAssetResponse?.serviceCategory ? props.mdmStore.seletedAssetResponse?.serviceCategory : []);
+            setAssetNumber(props.mdmStore.seletedAssetResponse?.name ? props.mdmStore.seletedAssetResponse?.name : "");
+        }
+    }, [props.mdmStore?.seletedAssetResponse, props.mdmStore?.isPareantAssetEditable])
+
+    function validate(field: Field): void {
+        props.sfStore!.sfValidator!.validateField(field);
+    }
+
+    function correct(field: Field): void {
+        props.sfStore!.sfValidator!.correctField(field);
+    }
+
+    function optionGroupTemplate(option) {
+        return (
+            <span style={{ fontWeight: 'bold' }}>{option.label}
+                <span className="option-info">{option.info}</span>
+            </span>
+        );
+    }
+
+    return (
+        <div className="passetMainDiv">
+            {!props.mdmStore?.isPareantAssetEditable ?
+                props.mdmStore?.parentAssetData?.map((item: any) => {
+                    return (
+                        <div className="view-field">
+                            <span className="parentKey font-bold">{item.key}</span>
+                            <span className="parentKeyValue font-normal">{item.value}</span>
+                        </div>)
+                })
+                :
+                <div className="grid col-12 passetMargin">
+                    {/* Asset Number */}
+                    <InputTxt
+                        tooltipText={props.sfStore?.fieldHelpText?.mdm_edit_name}
+                        id={"tailnumber"}
+                        testid={"tail-num"}
+                        className={"col-12 md:col-5 lg:col-4 xl:col-4"}
+                        placeholder={AppConstants.INPUT_PLACE_HOLDER_PREFIX + assetNumberField!.label}
+                        value={assetNumber}
+                        label={assetNumberField!.label!}
+                        onChange={(e) => {
+                            setAssetNumber(e.target.value.toUpperCase());
+                            assetNumberField!.value = e.target.value.toUpperCase();
+                            correct(assetNumberField!);
+                        }}
+                        onBlur={() => validate(assetNumberField!)}
+                        error={assetNumberField!.error}
+                        helperText={assetNumberField!.helpText}
+                        reserveSpace={true}
+                        disabled={assetNumberField!.disabled}
+                    />
+
+                    {/* Asset Call Sign */}
+                    {/* <InputTxt
+                        tooltipText={props.sfStore?.fieldHelpText?.mdm_edit_call_sign}
+                        id={"callSign"}
+                        testid={"tcallSign"}
+                        className={"col-12 md:col-5 lg:col-4 xl:col-4"}
+                        value={primaryCallSignField!.value}
+                        label={primaryCallSignField!.label!}
+                        error={primaryCallSignField!.error}
+                        onChange={e => {
+                            primaryCallSignField!.value = e.target.value?.toUpperCase();
+                        }}
+                        onBlur={() => validate(primaryCallSignField!)}
+                        helperText={primaryCallSignField!.helpText}
+                        reserveSpace={true}
+                        disabled={primaryCallSignField!.disabled}
+                    /> */}
+
+                    {/* Primary Asset Type*/}
+                    <div className={"col-12 md:col-5 lg:col-4 xl:col-4"}>
+                        <Select
+                            tooltipText={props.sfStore?.fieldHelpText?.mdm_edit_type}
+                            testid={"customer-type-ci"}
+                            search={true}
+                            className={"srf-content-input"}
+                            placeholder={AppConstants.SELECT_PLACE_HOLDER_PREFIX}
+                            label={parentAssetTypeField!.label}
+                            options={props.sfStore!.parentAssetTypeList}
+                            value={parentAssetTypeField!.value}
+                            onChange={(e) => {
+                                parentAssetTypeField!.value = e.value;
+                                parentAssetTypeField!.error = '';
+                            }}
+                            disabled={parentAssetTypeField!.disabled}
+                            onBlur={() => validate(parentAssetTypeField!)}
+                            error={parentAssetTypeField!.error}
+                            helperText={parentAssetTypeField!.helpText}
+                            reserveSpace={true}
+                        />
+                    </div>
+
+                    {/* Customer catagory */}
+                    <div className={"srf-content-input-select col-12 md:col-5 lg:col-4 xl:col-4"}>
+                        <MultiSelectInput
+                            tooltipText={props.sfStore?.fieldHelpText?.mdm_edit_service_category}
+                            id={"customer-select-ci"}
+                            testid={"customer-type-ci"}
+                            search={true}
+                            elementClassName={'w-10'}
+                            name={'locationfleet'}
+                            label={AppConstants.SERVICE_CATEGORY}
+                            optionLabel="label"
+                            placeholder={AppConstants.SELECT_PLACE_HOLDER_PREFIX}
+                            panelClassName={'sercvice-category-multi-select'}
+                            showSelectAll={false}
+                            optionValue="value"
+                            display="chip"
+                            optionGroupLabel="label"
+                            optionGroupChildren="items"
+                            options={props.sfStore!.customerTypeList}
+                            value={serviceCategory}
+                            useOptionAsValue={false}
+                            filter={true}
+                            optionGroupTemplate={optionGroupTemplate}
+                            onChange={(e) => {
+                                let values = e.value || [];
+                                const primarySelected = values.filter(v => props.sfStore!.primaryCustomerTypeList.some(opt => opt.value === v));
+                                const secondarySelected = values.filter(v => props.sfStore!.secondaryCustomerTypeList.some(opt => opt.value === v));
+                                let newPrimary = primarySelected.length > 1 ? [primarySelected[primarySelected.length - 1]] : primarySelected;
+                                const value: any = [...newPrimary, ...secondarySelected];
+                                serviceCategoryField!.value = value;
+                                setServiceCategory(value);
+                                validate(serviceCategoryField!);
+                            }}
+                            onBlur={() => validate(serviceCategoryField!)}
+                            error={serviceCategoryField!.error}
+                            helperText={serviceCategoryField!.helpText}
+                            reserveSpace={true}
+                            disabled={serviceCategoryField!.disabled}
+                        />
+                    </div>
+
+                    {/* Resellers */}
+                    {serviceCategory.includes("Reseller") &&
+                        <div className={"srf-content-input-select col-12 md:col-5 lg:col-4 xl:col-4"}>
+                            <MultiSelectInput
+                                tooltipText={props.sfStore?.fieldHelpText?.mdm_edit_reseller}
+                                testid={"customerReseller"}
+                                elementClassName={'w-10'}
+                                search={true}
+                                name={'resellers'}
+                                id={"customer-select-ci"}
+                                optionLabel="text"
+                                placeholder={AppConstants.SELECT_PLACE_HOLDER_PREFIX}
+                                label={parentAssetResellerField!.label}
+                                options={props.sfStore!.assetResellersList}
+                                useOptionAsValue={false}
+                                filter={true}
+                                value={reseller}
+                                onChange={(e) => {
+                                    let values = e.value || [];
+                                    let resellerValue: any = values.length > 1 ? [values[values.length - 1]] : values;
+                                    parentAssetResellerField!.value = resellerValue;
+                                    setReseller(resellerValue);
+                                    validate(parentAssetResellerField!);
+                                    parentAssetResellerField!.error = '';
+                                }}
+                                disabled={parentAssetResellerField!.disabled}
+                                onBlur={() => validate(parentAssetResellerField!)}
+                                error={parentAssetResellerField!.error}
+                                helperText={parentAssetResellerField!.helpText}
+                                reserveSpace={true}
+                            />
+                        </div>
+                    }
+
+                    {/* Primary Asset Manufacturer*/}
+                    <div className={"col-12 md:col-5 lg:col-4 xl:col-4"}>
+                        <Select
+                            tooltipText={props.sfStore?.fieldHelpText?.mdm_edit_manufacturer}
+                            testid={"customer-type-ci"}
+                            search={true}
+                            className={"srf-content-input"}
+                            placeholder={AppConstants.SELECT_PLACE_HOLDER_PREFIX}
+                            label={parentAssetManufacturerField!.label}
+                            options={props.sfStore!.siteManufacturers.map((item) => {
+                                return props.sfStore?.newOption(item.assetmanufacturername, item.assetmanufacturername);
+                            })}
+                            value={parentAssetManufacturerField!.value}
+                            onChange={(e) => {
+                                parentAssetManufacturerField!.value = e.value;
+                                parentAssetManufacturerField!.error = '';
+                                const parentAssetManufacturerId = props.sfStore!.siteManufacturers.find(
+                                    (siteManufacturers) => siteManufacturers.assetmanufacturername === e.value)
+                                props.sfStore!.getAssetModel(parentAssetManufacturerId?.id)
+                            }}
+                            onBlur={() => validate(parentAssetManufacturerField!)}
+                            error={parentAssetManufacturerField!.error}
+                            disabled={parentAssetManufacturerField!.disabled}
+                            helperText={parentAssetManufacturerField!.helpText}
+                            reserveSpace={true}
+                        />
+                    </div>
+
+                    {/* Primary Asset Model*/}
+                    <div className={"col-12 md:col-5 lg:col-4 xl:col-4"}>
+                        <Select
+                            tooltipText={props.sfStore?.fieldHelpText?.mdm_edit_model}
+                            testid={"customer-type-ci"}
+                            search={true}
+                            className={"srf-content-input"}
+                            placeholder={AppConstants.SELECT_PLACE_HOLDER_PREFIX}
+                            label={parentAssetModelField!.label}
+                            options={props.sfStore!.SiteAssetModel.map((item) => {
+                                return props.sfStore?.newOption(item.name, item.name);
+                            })}
+                            value={parentAssetModelField!.value}
+                            onChange={(e) => {
+                                parentAssetModelField!.value = e.value;
+                                parentAssetModelField!.error = '';
+                            }}
+                            onBlur={() => validate(parentAssetModelField!)}
+                            error={parentAssetModelField!.error}
+                            disabled={parentAssetModelField!.disabled}
+                            helperText={parentAssetModelField!.helpText}
+                            reserveSpace={true}
+                        />
+                    </div>
+
+                    {/* Primary Asset Identifier Value*/}
+                    <InputTxt
+                        tooltipText={props.sfStore?.fieldHelpText?.mdm_edit_serial_no}
+                        testid={"serial-num-ai"}
+                        className={"srf-content-input col-12 md:col-5 lg:col-4 xl:col-4"}
+                        placeholder={
+                            AppConstants.INPUT_PLACE_HOLDER_PREFIX + parentAssetIdentifierValueField!.label
+                        }
+                        label={parentAssetIdentifierValueField!.label}
+                        value={parentAssetIdentifierValueField!.value}
+                        onChange={(e) => {
+                            parentAssetIdentifierValueField!.value = e.target.value;
+                            correct(parentAssetIdentifierValueField!);
+                        }}
+                        onBlur={() => validate(parentAssetIdentifierValueField!)}
+                        error={parentAssetIdentifierValueField!.error}
+                        disabled={parentAssetIdentifierValueField!.disabled}
+                        helperText={parentAssetIdentifierValueField!.helpText}
+                        reserveSpace={true}
+                    />
+
+                    {/* AESID */}
+                    <InputTxt
+                        tooltipText={props.sfStore?.fieldHelpText?.mdm_edit_aes_id}
+                        testid={"aesid-ai"}
+                        className={
+                            "srf-content-input col-12 md:col-5 lg:col-4 xl:col-4"
+                        }
+                        placeholder={
+                            AppConstants.INPUT_PLACE_HOLDER_PREFIX + aesidField!.label
+                        }
+                        label={aesidField!.label}
+                        value={aesid}
+                        onChange={(e) => {
+                            aesidField!.value = e.target.value;
+                            setAesid(e.target.value);
+                            correct(aesidField!);
+                        }}
+                        onBlur={() => validate(aesidField!)}
+                        disabled={aesidField!.disabled}
+                        error={aesidField!.error}
+                        helperText={aesidField!.helpText}
+                        reserveSpace={true}
+                    />
+
+                    {/* Home Airport ICAO Code */}
+                    <div className={"srf-content-input-select col-12 md:col-5 lg:col-4 xl:col-4"}>
+                        <AutoSuggestComponent
+                            tooltipText={props.sfStore?.fieldHelpText?.mdm_edit_airport_icao}
+                            id={"icao-code-aircraft"}
+                            testid={"icao-code-ai"}
+                            search={true}
+                            className={"srf-content-input"}
+                            placeholder={
+                                AppConstants.INPUT_PLACE_HOLDER_PREFIX +
+                                icaoField!.label
+                            }
+                            label={icaoField!.label}
+                            infoTooltipText={"Enter NA for Heli Assets"}
+                            // options={homeAirportICAOCodeOptions}
+                            value={icao}
+                            minCharacters={2}
+                            onBlur={() => validate(icaoField!)}
+                            results={props.sfStore!.icaoList.map((proxyObject) =>
+                                JSON.parse(JSON.stringify(proxyObject))
+                            )}
+                            noResultsMessage={
+                                icaoField!.value + AppConstants.NEW_ICAO_CODE
+                            }
+                            onChange={(e) => {
+                                if (typeof e.value === 'string') {
+                                    icaoField!.value = e.value.toUpperCase();
+                                    setIcaoField(e.value.toUpperCase());
+                                } else {
+                                    icaoField!.value = e.value;
+                                    setIcaoField(e.value);
+                                }
+                            }}
+                            onSearchChange={(e) => {
+                                correct(icaoField!);
+                                props.sfStore!.handleOnSearchChangeIcaos(
+                                    icaoField!.value!
+                                );
+                            }}
+                            onResultSelect={(e) => {
+                                icaoField!.value = e.value.value;
+                                setIcaoField(e.value.value);
+                            }}
+                            error={icaoField!.error}
+                            disabled={icaoField!.disabled}
+                            helperText={icaoField!.helpText}
+                            reserveSpace={true}
+                        />
+                    </div>
+
+                    {/* Type of Use */}
+                    <div
+                        className={
+                            "srf-content-input-select col-12 md:col-5 lg:col-4 xl:col-4"
+                        }
+                        >
+                        <Select
+                            tooltipText={props.sfStore?.fieldHelpText?.mdm_edit_use_type}
+                            testid={"type-of-use-ai"}
+                            search={true}
+                            className={"srf-content-input"}
+                            placeholder={AppConstants.SELECT_PLACE_HOLDER_PREFIX}
+                            label={typeOfUseField!.label}
+                            options={props.sfStore?.typeOfUseList}
+                            value={typeOfUse}
+                            onChange={(e) => {
+                                typeOfUseField!.value = e.value;
+                                typeOfUseField!.error = '';
+                                setTypeOfUseField(e.value);
+                            }}
+                            onBlur={() => validate(typeOfUseField!)}
+                            error={typeOfUseField!.error}
+                            helperText={typeOfUseField!.helpText}
+                            reserveSpace={true}
+                        />
+                    </div>
+
+                    {/* prevoius provider */}
+                    <div className={"srf-content-input-select col-12 md:col-5 lg:col-4 xl:col-4"}>
+                        <Select
+                            tooltipText={props.sfStore?.fieldHelpText?.mdm_edit_prev_provider}
+                            testid={"previous-provider-ai"}
+                            search={true}
+                            className={"srf-content-input"}
+                            placeholder={AppConstants.SELECT_PLACE_HOLDER_PREFIX}
+                            // label={privousProvoiderField!.label && (
+                            //     <div className="flex justify-content-between w-10">
+                            //         {privousProvoiderField!.label}
+                            //         <span className="input-label-optional font-italic">Optional</span>
+                            //     </div>)}
+                            label={privousProvoiderField!.label}
+                            isOptional={true}
+                            options={previousProviderOptions}
+                            value={privousProvoider}
+                            onChange={(e) => {
+                                privousProvoiderField!.value = e.value;
+                                privousProvoiderField!.error = '';
+                                setPrivousProvoiderField(e.value);
+                            }}
+                            onBlur={() => validate(privousProvoiderField!)}
+                            error={privousProvoiderField!.error}
+                            helperText={privousProvoiderField!.helpText}
+                            reserveSpace={true}
+                            disabled={privousProvoiderField!.disabled}
+                        />
+                    </div>
+                </div>
+            }
+        </div>
+    )
+});
+
+export default inject("routerStore", "mdmStore", "sfStore")(ParentAssetInformation);
